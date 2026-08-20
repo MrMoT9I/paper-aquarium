@@ -879,13 +879,23 @@ const STATIC_FILES = ['/print.html', '/terms.html', '/favicon.ico'];
 const DATA_FILE_RE = /^\/data\/tanks\/([^/]+)\/(?:preview\.jpg|backgrounds\/[\w.-]+)$/;
 
 function staticFor(url) {
-  const data = url.match(DATA_FILE_RE);
+  // Нормализуем адрес ДО проверки списка. Иначе «/assets/../server.js»
+  // проходит по началу строки как разрешённый, а «..» схлопывается уже
+  // после — и наружу уезжает любой файл рядом с сервером: .env с секретами,
+  // .git, исходники, meta.json аквариумов с солью и хешем пароля. Проверка
+  // ниже (startsWith ROOT) от этого не спасает: файл-то остаётся внутри
+  // проекта, из корня он не выходит. Поэтому: любой адрес, который
+  // нормализация меняет (лишний «.», «..» или «//»), — сразу мимо.
+  const clean = path.posix.normalize(url);
+  if (clean !== url) return null;
+
+  const data = clean.match(DATA_FILE_RE);
   const allowed = data
     ? TANK_ID_RE.test(data[1])
-    : STATIC_FILES.includes(url) || STATIC_DIRS.some((dir) => url.startsWith(dir));
+    : STATIC_FILES.includes(clean) || STATIC_DIRS.some((dir) => clean.startsWith(dir));
   if (!allowed) return null;
 
-  const file = path.normalize(path.join(ROOT, url));
+  const file = path.normalize(path.join(ROOT, clean));
   // Сравниваем с разделителем на конце: без него мимо проверки проходит
   // соседняя папка, имя которой начинается так же («…/009 aqua-backup»).
   return file.startsWith(ROOT + path.sep) ? file : null;
