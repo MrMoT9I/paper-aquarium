@@ -41,7 +41,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=web"
-      - "traefik.http.routers.aqua.rule=Host(`${DOMAIN}`)"
+      # Второй хост us.<домен> — тестовая прокладка через US-VPS для РФ:
+      # DNS поддомена смотрит на 157.173.200.234, тот форвардит 80/443 сюда.
+      - "traefik.http.routers.aqua.rule=Host(`${DOMAIN}`) || Host(`us.${DOMAIN}`)"
       - "traefik.http.routers.aqua.entrypoints=websecure"
       - "traefik.http.routers.aqua.tls.certresolver=letsencrypt"
       - "traefik.http.services.aqua.loadbalancer.server.port=8000"
