@@ -82,24 +82,75 @@ function clientKey(req) {
   return fwd || req.socket.remoteAddress || '?';
 }
 
-// Сколько занимает data. Считаем не чаще раза в минуту: обход папки дешёвый,
-// но дёргать его на каждую загрузку картинки незачем.
+// Сколько занимает data. Обход папки когда-то был дешёвым, но растёт вместе
+// с ней: на десяти тысячах аквариумов это 41 000 папок и 147 000 файлов —
+// девять-двенадцать секунд, и всё это время синхронный обход держит event
+// loop. Раз в минуту, как было заведено, он съедал шестую часть ядра и ронял
+// каждый двадцатый запрос в десятисекундное ожидание.
+//
+// Поэтому считаем иначе: полный обход раз в час и асинхронный — между файлами
+// сервер успевает отвечать. В промежутке счётчик ведут сами записи. Удаления
+// из корзины подхватит ближайший обход; пока он не прошёл, оценка завышена,
+// и для лимита это безопасная сторона.
+const DATA_RESCAN_MS = 60 * 60 * 1000;
 let dataSize = { bytes: 0, at: 0 };
-function dataBytes() {
-  if (Date.now() - dataSize.at < 60 * 1000) return dataSize.bytes;
+let scanAdded = null;   // не null, пока идёт обход: прибавки за это время
+
+function addDataBytes(delta) {
+  dataSize.bytes += delta;
+  if (scanAdded !== null) scanAdded += delta;
+}
+
+async function walkBytes(dir) {
+  let items = [];
+  try { items = await fs.promises.readdir(dir, { withFileTypes: true }); }
+  catch (e) { return 0; }
   let total = 0;
-  const walk = (dir) => {
-    let items = [];
-    try { items = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }
-    for (const it of items) {
-      const full = path.join(dir, it.name);
-      if (it.isDirectory()) walk(full);
-      else { try { total += fs.statSync(full).size; } catch (e) { /* исчез — и ладно */ } }
+  for (const it of items) {
+    const full = path.join(dir, it.name);
+    if (it.isDirectory()) total += await walkBytes(full);
+    else {
+      try { total += (await fs.promises.stat(full)).size; }
+      catch (e) { /* исчез — и ладно */ }
     }
-  };
-  walk(path.join(ROOT, 'data'));
-  dataSize = { bytes: total, at: Date.now() };
+  }
   return total;
+}
+
+// Первые полминуты после старта счётчик ещё нулевой и лимит не срабатывает.
+// Это сознательно: отказывать всем, пока считаем, хуже, чем пропустить
+// несколько картинок сверх лимита.
+function rescanData() {
+  if (scanAdded !== null) return;   // обход уже идёт
+  scanAdded = 0;
+  walkBytes(path.join(ROOT, 'data')).then((total) => {
+    // Записи, случившиеся во время обхода, могли в него не попасть —
+    // возвращаем их. Что-то посчитается дважды, но лишний байт безопаснее
+    // недостающего.
+    dataSize = { bytes: total + scanAdded, at: Date.now() };
+  }).catch(() => { /* обход не задался — живём по прежнему числу */ })
+    .finally(() => { scanAdded = null; });
+}
+
+// Писать в data только через это, иначе счётчик разъедется. Перезапись
+// считается по разнице: preview.jpg переписывается каждые несколько секунд,
+// и от полного размера счётчик пух бы на пустом месте.
+function writeData(file, data) {
+  let was = 0;
+  try { was = fs.statSync(file).size; } catch (e) { /* файла ещё не было */ }
+  fs.writeFileSync(file, data);
+  addDataBytes(Buffer.byteLength(data) - was);
+}
+
+function removeData(file) {
+  let was = 0;
+  try { was = fs.statSync(file).size; } catch (e) { /* уже нет */ }
+  fs.unlinkSync(file);
+  addDataBytes(-was);
+}
+
+function dataBytes() {
+  return dataSize.bytes;
 }
 
 function diskFull() {
@@ -448,7 +499,10 @@ function purgeTrash() {
   for (const id of readDirNames(TANKS)) {
     gone += purgeOld(path.join(TANKS, id, 'trash'), ttl);
   }
-  if (gone) console.log(`корзина: удалено безвозвратно ${gone} шт. старше ${TRASH_DAYS} дней`);
+  if (gone) {
+    console.log(`корзина: удалено безвозвратно ${gone} шт. старше ${TRASH_DAYS} дней`);
+    rescanData();   // только здесь data уменьшается мимо removeData()
+  }
 }
 
 function readDirNames(dir) {
@@ -523,7 +577,7 @@ function readSettings(t) {
 
 function writeSettings(t, s) {
   ensureTank(t);
-  fs.writeFileSync(t.settings, JSON.stringify(s));
+  writeData(t.settings, JSON.stringify(s));
 }
 
 // ── API внутри аквариума ───────────────────────────────────────────────────
@@ -563,7 +617,7 @@ function handleTankApi(req, res, t, url) {
       const buf = Buffer.from(data.image.slice(m[0].length), 'base64');
       if (!buf.length) return send(res, 400, '{"error":"пустой снимок"}');
       ensureTank(t);
-      fs.writeFileSync(t.preview, buf);
+      writeData(t.preview, buf);
       send(res, 200, JSON.stringify({ ok: true, bytes: buf.length }));
     });
   }
@@ -590,7 +644,7 @@ function handleTankApi(req, res, t, url) {
       meta.salt = crypto.randomBytes(16).toString('hex');
       meta.hash = hashPass(pass, meta.salt);
       ensureTank(t);
-      fs.writeFileSync(t.meta, JSON.stringify(meta));
+      writeData(t.meta, JSON.stringify(meta));
       console.log(`пароль аквариума ${t.id} изменён`);
       send(res, 200, JSON.stringify({ ok: true }));
     });
@@ -602,7 +656,7 @@ function handleTankApi(req, res, t, url) {
       const meta = readMeta(t);
       meta.name = String(data.name || '').trim().slice(0, 60) || meta.name;
       ensureTank(t);
-      fs.writeFileSync(t.meta, JSON.stringify(meta));
+      writeData(t.meta, JSON.stringify(meta));
       send(res, 200, JSON.stringify(publicMeta(meta)));
     });
   }
@@ -648,7 +702,7 @@ function handleTankApi(req, res, t, url) {
         const model = listPack().find((m) => m.name === data.model);
         if (!model) return send(res, 400, '{"error":"нет такой модели в паке"}');
         ensureTank(t);
-        fs.writeFileSync(path.join(t.fish, fid + '.json'), JSON.stringify({
+        writeData(path.join(t.fish, fid + '.json'), JSON.stringify({
           id: fid, type: 'pack', model: model.name, title: model.title,
           created: new Date().toISOString()
         }));
@@ -664,8 +718,8 @@ function handleTankApi(req, res, t, url) {
       }
       ensureTank(t);
       const png = Buffer.from(data.texture.split(',')[1], 'base64');
-      fs.writeFileSync(path.join(t.fish, fid + '.png'), png);
-      fs.writeFileSync(path.join(t.fish, fid + '.json'), JSON.stringify({
+      writeData(path.join(t.fish, fid + '.png'), png);
+      writeData(path.join(t.fish, fid + '.json'), JSON.stringify({
         id: fid, kind: String(data.kind), created: new Date().toISOString()
       }));
       console.log(`+ рыбка ${data.kind} в ${t.id} (${Math.round(png.length / 1024)} КБ) — всего ${listFish(t).length}`);
@@ -712,7 +766,7 @@ function handleTankApi(req, res, t, url) {
       const ext = m[1] === 'jpeg' ? '.jpg' : '.' + m[1];
       const name = UPLOAD_PREFIX + Date.now().toString(36) + '-' +
                    Math.random().toString(36).slice(2, 6) + ext;
-      fs.writeFileSync(path.join(t.backgrounds, name), buf);
+      writeData(path.join(t.backgrounds, name), buf);
       console.log(`+ фон ${name} в ${t.id} (${Math.round(buf.length / 1024)} КБ)`);
       send(res, 200, JSON.stringify({
         ok: true, name, url: '/data/tanks/' + t.id + '/backgrounds/' + name
@@ -728,7 +782,7 @@ function handleTankApi(req, res, t, url) {
     }
     const file = path.join(t.backgrounds, name);
     if (!fs.existsSync(file)) return send(res, 404, '{"error":"not found"}');
-    fs.unlinkSync(file);
+    removeData(file);
     // Если удалили фон, который сейчас стоит в сцене, — выдаём случайный,
     // иначе аквариум остался бы с битой ссылкой до следующей смены настроек.
     const s = readSettings(t);
@@ -838,7 +892,7 @@ function handleApi(req, res, url) {
         salt,
         hash: hashPass(pass, salt)
       };
-      fs.writeFileSync(t.meta, JSON.stringify(meta));
+      writeData(t.meta, JSON.stringify(meta));
       // Новый аквариум сразу с картинкой: какая достанется — дело случая.
       const background = randomBackground();
       writeSettings(t, { background });
@@ -999,4 +1053,9 @@ http.createServer((req, res) => {
   // редко, а обещание «через 30 дней» должно выполняться и без перезапуска.
   purgeTrash();
   setInterval(purgeTrash, 24 * 60 * 60 * 1000).unref();
+
+  // Размер data: считаем при старте и раз в час, в фоне. Между обходами
+  // счётчик поправляют сами записи — см. writeData().
+  rescanData();
+  setInterval(rescanData, DATA_RESCAN_MS).unref();
 });
