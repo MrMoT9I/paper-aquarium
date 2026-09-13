@@ -438,6 +438,24 @@ function send(res, code, body, type) {
   res.end(body);
 }
 
+// Опросы отличаются от прочего API тем, что ответ почти всегда прежний. ETag
+// превращает повтор в 304 без тела, но для этого браузеру нужно право хранить
+// ответ: no-store, как в send(), это запрещает. no-cache хранить разрешает и
+// обязывает перепроверять — ровно то, что нужно.
+function sendPoll(req, res, payload) {
+  const headers = {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-cache',
+    ETag: payload.etag
+  };
+  if (req.headers['if-none-match'] === payload.etag) {
+    res.writeHead(304, headers);
+    return res.end();
+  }
+  res.writeHead(200, headers);
+  res.end(payload.body);
+}
+
 // Тело запроса с потолком: без него один POST кладёт сервер по памяти.
 function readBody(req, res, onDone) {
   let body = '', size = 0, tooBig = false;
@@ -580,6 +598,71 @@ function writeSettings(t, s) {
   writeData(t.settings, JSON.stringify(s));
 }
 
+// ── кэш опросов ────────────────────────────────────────────────────────────
+// Аквариум висит на экране часами и каждые несколько секунд спрашивает одно и
+// то же: кто в тебе живёт и какой фон. Содержимое при этом меняется раз в
+// несколько минут, так что один и тот же ответ собирается сотни раз подряд —
+// а стоит он дорого: для /fish это readdir плюс чтение и разбор каждого json,
+// для /settings — чтение файла и два обхода папок с фонами, причём дважды,
+// потому что backgroundUrl() зовётся и внутри readSettings, и в хендлере.
+//
+// Держим готовый ответ в памяти, а свежесть сверяем по mtime: у папки с
+// рыбками и у самого settings.json. Это один statSync вместо сотни системных
+// вызовов. Сверка выбрана вместо сброса кэша в местах записи нарочно: mtime
+// папки меняется на любое создание, удаление и переименование внутри, поэтому
+// так видны и правки, сделанные мимо сервера, прямо в файлах. Ручной сброс
+// такого не заметил бы вовсе, и его пришлось бы помнить в каждом новом месте
+// записи.
+const CACHE_MAX = 2000;
+const pollCache = new Map();
+
+function cacheSlot(id) {
+  let slot = pollCache.get(id);
+  if (!slot) {
+    // Аквариумов тысячи, а смотрят единицы: без предела карта росла бы на
+    // каждый обход поисковика. Map помнит порядок вставки, так что лишним
+    // оказывается самый давний — те, кого смотрят сейчас, остаются.
+    if (pollCache.size >= CACHE_MAX) pollCache.delete(pollCache.keys().next().value);
+    slot = {};
+    pollCache.set(id, slot);
+  }
+  return slot;
+}
+
+function mtimeOf(file) {
+  try { return fs.statSync(file).mtimeMs; } catch (e) { return 0; }
+}
+
+// Метка версии — время правки и длина ответа, как у статики ниже: считать хэш
+// на каждый ответ дороже, чем его отдать.
+function fishPayload(t) {
+  const slot = cacheSlot(t.id);
+  const at = mtimeOf(t.fish);
+  if (!slot.fish || slot.fish.at !== at) {
+    const body = JSON.stringify(listFish(t));
+    slot.fish = { at, body, etag: `W/"f${Math.trunc(at).toString(36)}-${body.length.toString(36)}"` };
+  }
+  return slot.fish;
+}
+
+function settingsPayload(t, ev) {
+  const slot = cacheSlot(t.id);
+  if (!slot.settings || slot.settings.at !== mtimeOf(t.settings)) {
+    const s = readSettings(t);
+    // readSettings мог дописать потерянный фон — тогда файл уже другой, и
+    // запомнить надо время после записи, иначе кэш протух бы сразу.
+    slot.settings = {
+      at: mtimeOf(t.settings),
+      base: Object.assign({}, s, { backgroundUrl: backgroundUrl(t, s.background) })
+    };
+  }
+  // Кормление живёт в памяти и меняется чаще настроек, поэтому в кэш не идёт.
+  // Но в метку версии входит: иначе экран получил бы 304 и не заметил еды.
+  const body = JSON.stringify(Object.assign({}, slot.settings.base, { feedAt: ev.feedAt }));
+  const ver = Math.trunc(slot.settings.at).toString(36) + '-' + (ev.feedAt || 0).toString(36);
+  return { body, etag: `W/"s${ver}"` };
+}
+
 // ── API внутри аквариума ───────────────────────────────────────────────────
 function handleTankApi(req, res, t, url) {
   // Аквариум заводится только явно, через POST /api/tanks. Значит нет папки —
@@ -669,12 +752,13 @@ function handleTankApi(req, res, t, url) {
       fs.renameSync(t.dir, path.join(TANKS_TRASH, t.id + '-' + Date.now()));
     }
     events.delete(t.id);
+    pollCache.delete(t.id);
     console.log(`- аквариум ${t.id} → в корзину (data/trash-tanks)`);
     return send(res, 200, '{"ok":true}');
   }
 
   if (req.method === 'GET' && url === '/fish') {
-    return send(res, 200, JSON.stringify(listFish(t)));
+    return sendPoll(req, res, fishPayload(t));
   }
 
   const texMatch = url.match(/^\/fish\/([a-z0-9-]+)\/texture\.png$/);
@@ -792,11 +876,7 @@ function handleTankApi(req, res, t, url) {
   }
 
   if (req.method === 'GET' && url === '/settings') {
-    const s = readSettings(t);
-    return send(res, 200, JSON.stringify(Object.assign(s, {
-      backgroundUrl: backgroundUrl(t, s.background),
-      feedAt: ev.feedAt
-    })));
+    return sendPoll(req, res, settingsPayload(t, ev));
   }
 
   if ((req.method === 'POST' || req.method === 'PUT') && url === '/settings') {
