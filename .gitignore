@@ -8,7 +8,10 @@
 # использование, но запрещает перезаливку файлов, поэтому в репозиторий
 # они не идут. Пересобираются из «купил 3д рыбок» скриптом:
 #   tools\convert-pack.ps1
-assets/models/pack/
+assets/models/pack/*
+!assets/models/pack/pack.json
+!assets/models/pack/spherebot/
+!assets/models/pack/robot/
 
 # Черновики, скачанные модели и старые демки. Часть моделей оттуда —
 # Personal Use или вовсе без внятной лицензии, поэтому папка целиком мимо

@@ -1,0 +1,622 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Аквариум</title>
+<style>
+  :root {
+    --ink: #eaf6ff;
+    --muted: #8aa6bd;
+    --panel: rgba(8, 20, 34, 0.62);
+    --line: rgba(140, 200, 255, 0.18);
+    --accent: #58d6ff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0e1013; overflow: hidden;
+    color: var(--ink);
+    font: 14px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+  canvas { display: block; }
+
+  .taphint {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    font: 14px/1.4 system-ui, sans-serif; color: var(--muted);
+    background: var(--panel);
+    border: 1px solid var(--line); border-radius: 20px;
+    padding: 8px 20px; pointer-events: none; z-index: 5;
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  }
+  .taphint[hidden] { display: none; }
+
+  .menu {
+    position: fixed; inset: 0; z-index: 15;
+    display: grid; place-items: center; padding: 16px;
+    background: rgba(2, 10, 18, 0.55);
+    backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+    animation: menu-fade 0.16s ease-out;
+  }
+  .menu[hidden] { display: none; }
+  @keyframes menu-fade { from { opacity: 0 } to { opacity: 1 } }
+
+  .menu .card {
+    position: relative;
+    width: min(420px, 100%); max-height: 100%; overflow: auto;
+    background: rgba(6, 22, 38, 0.94);
+    border: 1px solid var(--line); border-radius: 20px;
+    padding: 20px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+    animation: menu-rise 0.18s ease-out;
+  }
+  @keyframes menu-rise { from { transform: translateY(14px); opacity: 0 } to { transform: none; opacity: 1 } }
+
+  .menu h2 { margin: 0; font-size: 19px; font-weight: 600; padding-right: 40px; }
+  .menu .who { margin: 4px 0 14px; font-size: 12px; color: var(--muted); }
+
+  .menu .item {
+    display: flex; align-items: center; gap: 12px;
+    width: 100%; margin: 6px 0; padding: 12px 14px;
+    font: inherit; text-decoration: none;
+    color: var(--ink); background: rgba(88, 214, 255, 0.08);
+    border: 1px solid var(--line); border-radius: 14px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  }
+  .menu .item:hover { background: rgba(88, 214, 255, 0.18); border-color: rgba(140, 200, 255, 0.45); }
+  .menu .item:active { transform: scale(0.98); }
+  .menu .item.main { background: var(--accent); border-color: var(--accent); color: #04101c; }
+  .menu .item.main:hover { background: #7ce0ff; }
+  .menu .item .ico { font-size: 20px; flex: none; width: 28px; text-align: center; }
+  .menu .item b { display: block; font-size: 14px; font-weight: 600; }
+  .menu .item i { display: block; font-size: 12px; font-style: normal; opacity: 0.6; }
+
+  .menu .x {
+    position: absolute; top: 14px; right: 14px;
+    width: 32px; height: 32px; line-height: 32px; text-align: center;
+    font-size: 14px; border-radius: 50%;
+    color: var(--muted); background: rgba(88, 214, 255, 0.08);
+    border: 1px solid var(--line); cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .menu .x:hover { color: var(--ink); background: rgba(88, 214, 255, 0.2); border-color: rgba(140, 200, 255, 0.45); }
+
+  .menu .goback {
+    display: inline-block; margin: 0 0 10px; padding: 0;
+    font: inherit; color: var(--muted); background: none; border: 0; cursor: pointer;
+  }
+  .menu .goback:hover { color: var(--accent); }
+
+  .bggrid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    margin: 10px 0;
+  }
+  .bggrid button {
+    position: relative; padding: 0; border: 2px solid var(--line); border-radius: 10px;
+    overflow: hidden; cursor: pointer; background: #0a2233;
+    aspect-ratio: 16 / 9;
+    transition: border-color 0.15s, transform 0.1s;
+  }
+  .bggrid button:hover { border-color: var(--accent); }
+  .bggrid button:active { transform: scale(0.97); }
+  .bggrid button.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .bggrid button img {
+    display: block; width: 100%; height: 100%; object-fit: cover;
+  }
+
+  .langrow {
+    margin: 10px 0 0; text-align: center;
+  }
+  .langrow button {
+    font: 12px/1 system-ui, sans-serif; padding: 4px 10px;
+    border: 1px solid transparent; border-radius: 8px;
+    background: transparent; color: var(--muted); cursor: pointer;
+    transition: color .15s, background .15s, border-color .15s;
+  }
+  .langrow button:hover { color: var(--ink); }
+  .langrow button.active {
+    color: var(--accent); border-color: var(--line); background: rgba(88, 214, 255, 0.1);
+  }
+</style>
+</head>
+<body>
+
+<div class="taphint" id="taphint"></div>
+
+<div class="menu" id="menu" hidden>
+  <div class="card" id="menu-card">
+    <button class="x" id="m-close" type="button">&#x2715;</button>
+
+    <div id="menu-main">
+      <h2 id="m-name"></h2>
+      <p class="who"><span id="m-count"></span></p>
+
+      <button class="item main" id="m-add" type="button">
+        <span class="ico">🤖</span>
+        <span><b id="t-add-title"></b><i id="t-add-sub"></i></span>
+      </button>
+      <button class="item" id="m-feed" type="button">
+        <span class="ico">&#x26A1;</span>
+        <span><b id="t-feed-title"></b><i id="t-feed-sub"></i></span>
+      </button>
+      <button class="item" id="m-bg" type="button">
+        <span class="ico">&#x1F5BC;&#xFE0F;</span>
+        <span><b id="t-bg-title"></b><i id="t-bg-sub"></i></span>
+      </button>
+
+      <div class="langrow" id="langrow"></div>
+    </div>
+
+    <div id="menu-bgpick" hidden>
+      <button class="goback" id="m-bgback" type="button"></button>
+      <h2 id="t-bg-heading"></h2>
+      <div class="bggrid" id="bggrid"></div>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/three.min.js"></script>
+<script src="vendor/GLTFLoader.js"></script>
+<script src="vendor/DRACOLoader.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // ── i18n ──────────────────────────────────────────────────────────────
+  var LANGS = ['ru', 'en', 'pl'];
+  var DICT = {
+    ru: {
+      title: 'Аквариум',
+      hint: 'нажми в любом месте',
+      count0: 'роботов пока нет',
+      count: function (n) {
+        var m = n % 10, h = n % 100;
+        var w = (m === 1 && h !== 11) ? 'робот' : (m >= 2 && m <= 4 && (h < 12 || h > 14)) ? 'робота' : 'роботов';
+        return n + ' ' + w;
+      },
+      add: 'Запустить робота', addSub: 'добавить нового',
+      feed: 'Подзарядить', feedSub: 'роботы соберутся на подзарядку',
+      bg: 'Сменить фон', bgSub: 'картинка, на фоне которой двигаются роботы',
+      bgTitle: 'Выбери фон', back: '← назад'
+    },
+    en: {
+      title: 'Aquarium',
+      hint: 'tap anywhere',
+      count0: 'no robots yet',
+      count: function (n) { return n + ' robot' + (n !== 1 ? 's' : ''); },
+      add: 'Add a robot', addSub: 'add a new one',
+      feed: 'Recharge', feedSub: 'robots gather for a charge-up',
+      bg: 'Change background', bgSub: 'the image behind the robots',
+      bgTitle: 'Pick a background', back: '← back'
+    },
+    pl: {
+      title: 'Akwarium',
+      hint: 'dotknij dowolne miejsce',
+      count0: 'jeszcze nie ma robotów',
+      count: function (n) {
+        var m = n % 10, h = n % 100;
+        var w = (n === 1) ? 'robot' : (m >= 2 && m <= 4 && (h < 12 || h > 14)) ? 'roboty' : 'robotów';
+        return n + ' ' + w;
+      },
+      add: 'Dodaj robota', addSub: 'dodaj nowego',
+      feed: 'Naładuj', feedSub: 'roboty zbiorą się na ładowanie',
+      bg: 'Zmień tło', bgSub: 'obrazek za robotami',
+      bgTitle: 'Wybierz tło', back: '← wstecz'
+    }
+  };
+  var lang = 'ru';
+  try { var s = localStorage.getItem('aqua.lang'); if (s && DICT[s]) lang = s; } catch (e) {}
+  if (!DICT[lang]) {
+    var bl = (navigator.language || '').slice(0, 2).toLowerCase();
+    if (DICT[bl]) lang = bl;
+  }
+  function t(key) { return DICT[lang][key] || DICT.ru[key] || key; }
+
+  function applyLang() {
+    document.getElementById('m-name').textContent = t('title');
+    document.getElementById('t-add-title').textContent = t('add');
+    document.getElementById('t-add-sub').textContent = t('addSub');
+    document.getElementById('t-feed-title').textContent = t('feed');
+    document.getElementById('t-feed-sub').textContent = t('feedSub');
+    document.getElementById('t-bg-title').textContent = t('bg');
+    document.getElementById('t-bg-sub').textContent = t('bgSub');
+    document.getElementById('t-bg-heading').textContent = t('bgTitle');
+    document.getElementById('m-bgback').textContent = t('back');
+    document.getElementById('taphint').textContent = t('hint');
+    document.title = t('title');
+    updateCount();
+  }
+
+  function mountLang() {
+    var row = document.getElementById('langrow');
+    LANGS.forEach(function (code) {
+      var btn = document.createElement('button');
+      btn.textContent = code.toUpperCase();
+      btn.type = 'button';
+      if (code === lang) btn.className = 'active';
+      btn.onclick = function () {
+        lang = code;
+        try { localStorage.setItem('aqua.lang', code); } catch (e) {}
+        row.querySelectorAll('button').forEach(function (b) { b.className = ''; });
+        btn.className = 'active';
+        applyLang();
+      };
+      row.appendChild(btn);
+    });
+  }
+
+  // ── constants ─────────────────────────────────────────────────────────
+  var MAX_ROBOTS = 20;
+  var BACKGROUNDS = [
+    'assets/backgrounds/webp/01-0.webp',
+    'assets/backgrounds/webp/01-1.webp',
+    'assets/backgrounds/webp/02-0.webp',
+    'assets/backgrounds/webp/02-1.webp',
+    'assets/backgrounds/webp/03-0.webp',
+    'assets/backgrounds/webp/03-1.webp',
+    'assets/backgrounds/webp/04-0.webp',
+    'assets/backgrounds/webp/05-0.webp',
+    'assets/backgrounds/webp/05-1.webp'
+  ];
+  var COLORS = [0x58d6ff, 0xff6b8a, 0x6bff8a, 0xffd66b, 0xd66bff, 0xff8a6b, 0x6bd6ff, 0x8aff6b, 0xff6bd6];
+
+  var Z_NEAR = 6, Z_FAR = -18, FLOOR = 0;
+  var MARGIN = 1.6, FLOOR_ROOM = 0.9;
+  var CAM_POS = [0, 6.5, 17.5], CAM_TARGET = [0, 6.5, 0];
+  var FOV = 42;
+  var TAN_HALF_FOV = Math.tan(FOV / 2 * Math.PI / 180);
+
+  var renderer, scene, camera, clock;
+  var robots = [];
+  var foods = [], foodGeo, foodMat;
+  var currentBg = 0;
+  var robotTemplate = null;
+  var pendingRobots = 0;
+
+  var FOOD_MAX = 220;
+  var FOOD_REACH = 0.9;
+  var FOOD_FADE = 3.5;
+  var EAT_REACH = 0.8;
+
+  function limitsAt(z) {
+    var d = CAM_POS[2] - z;
+    var half = d * TAN_HALF_FOV;
+    var aspect = camera ? camera.aspect : innerWidth / innerHeight;
+    var yc = CAM_TARGET[1];
+    return {
+      hw: half * aspect + MARGIN,
+      yTop: yc + half + MARGIN,
+      yBot: Math.max(FLOOR + FLOOR_ROOM, yc - half - MARGIN)
+    };
+  }
+
+  function frameAt(z) {
+    var d = CAM_POS[2] - z;
+    var half = d * TAN_HALF_FOV;
+    var aspect = camera ? camera.aspect : innerWidth / innerHeight;
+    var yc = CAM_TARGET[1];
+    return { hw: half * aspect, yTop: yc + half, yBot: Math.max(FLOOR + FLOOR_ROOM, yc - half) };
+  }
+
+  // ── Robot class ────────────────────────────────────────────────────────
+  var ROBOT_SCALE = 1.8;
+  function Robot() {
+    if (!robotTemplate) return;
+    var color = COLORS[robots.length % COLORS.length];
+    this.mesh = robotTemplate.clone();
+    this.mesh.traverse(function (n) {
+      if (n.isMesh) {
+        n.material = n.material.clone();
+        n.material.color.set(color);
+        n.material.emissive = new THREE.Color(color);
+        n.material.emissiveIntensity = 0.12;
+      }
+    });
+    this.mesh.scale.setScalar(ROBOT_SCALE);
+    this.speed = 1.2 + Math.random() * 0.6;
+    this.phase = Math.random() * 6.28;
+    this.noticeFood = 5 + Math.random() * 8;
+    this.fullUntil = 0;
+
+    var z0 = Z_FAR + Math.random() * (Z_NEAR - Z_FAR);
+    var l0 = limitsAt(z0);
+    var inX = Math.max(0.5, l0.hw - MARGIN);
+    var inLo = l0.yBot + MARGIN, inHi = l0.yTop - MARGIN;
+    this.pos = new THREE.Vector3(
+      (Math.random() * 2 - 1) * inX,
+      inLo + Math.random() * Math.max(0.5, inHi - inLo),
+      z0
+    );
+    this.vel = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize().multiplyScalar(this.speed);
+    scene.add(this.mesh);
+  }
+
+  var _a = new THREE.Vector3(), _l = new THREE.Vector3(), _d = new THREE.Vector3();
+  Robot.prototype.update = function (dt, t) {
+    _a.set(
+      Math.sin(t * 0.42 + this.phase) * 0.5,
+      Math.sin(t * 0.3 + this.phase * 1.6) * 0.22,
+      Math.cos(t * 0.37 + this.phase) * 0.5
+    );
+
+    if (foods.length && t > this.fullUntil) {
+      var best = -1, bestD = 1e9;
+      for (var fi = 0; fi < foods.length; fi++) {
+        var fd = this.pos.distanceTo(foods[fi].mesh.position);
+        if (fd < bestD) { bestD = fd; best = fi; }
+      }
+      if (best >= 0 && bestD < this.noticeFood) {
+        if (bestD < EAT_REACH) {
+          eatNear(this.pos, 1 + Math.floor(Math.random() * 3));
+          this.fullUntil = t + 2.5 + Math.random() * 8;
+        } else {
+          _d.copy(foods[best].mesh.position).sub(this.pos).normalize();
+          _a.addScaledVector(_d, bestD < 6 ? 4.5 : 2.2);
+        }
+      }
+    }
+
+    var M = MARGIN, W = 5;
+    if (this.pos.z > Z_NEAR - M) _a.z -= W;
+    if (this.pos.z < Z_FAR + M) _a.z += W;
+    var lim = limitsAt(this.pos.z);
+    if (this.pos.x > lim.hw - M) _a.x -= W;
+    if (this.pos.x < -lim.hw + M) _a.x += W;
+    if (this.pos.y > lim.yTop - M) _a.y -= W;
+    if (this.pos.y < lim.yBot + M) _a.y += W;
+    var floor = FLOOR + FLOOR_ROOM;
+    if (this.pos.y < floor) _a.y += (floor - this.pos.y) * 4;
+
+    this.vel.addScaledVector(_a, dt * 2.0);
+    var sp = this.vel.length();
+    if (sp > this.speed) this.vel.multiplyScalar(this.speed / sp);
+    if (sp < this.speed * 0.35) this.vel.multiplyScalar(1.05);
+
+    this.pos.addScaledVector(this.vel, dt);
+    this.mesh.position.copy(this.pos);
+    this.mesh.lookAt(_l.copy(this.pos).add(this.vel));
+    this.mesh.rotation.z += Math.sin(t * 2.5 + this.phase) * 0.04;
+    this.mesh.rotation.x += Math.sin(t * 1.8 + this.phase * 0.7) * 0.02;
+  };
+
+  // ── food ───────────────────────────────────────────────────────────────
+  function eatNear(pos, max) {
+    var ate = 0;
+    for (var i = foods.length - 1; i >= 0 && ate < max; i--) {
+      if (pos.distanceTo(foods[i].mesh.position) < EAT_REACH) {
+        eatFood(i); ate++;
+      }
+    }
+  }
+
+  function eatFood(i) {
+    scene.remove(foods[i].mesh);
+    foods.splice(i, 1);
+  }
+
+  function feedNow() {
+    if (!foodGeo) {
+      foodGeo = new THREE.SphereGeometry(0.09, 8, 6);
+      foodMat = new THREE.MeshStandardMaterial({
+        color: 0xd2913f, roughness: 0.9, emissive: 0x63421a, emissiveIntensity: 0.6
+      });
+    }
+    var tight = Math.random();
+    var spreadX = 0.7 + (1 - tight) * 5.0;
+    var spreadZ = 0.5 + (1 - tight) * 2.4;
+    var count = Math.round(7 + (1 - tight) * 26 + Math.random() * 10);
+    count = Math.min(count, Math.max(0, FOOD_MAX - foods.length));
+
+    var cz = Z_NEAR - 3 - Math.random() * ((Z_NEAR - Z_FAR) * 0.45);
+    var cl = frameAt(cz);
+    var cx = (Math.random() * 2 - 1) * Math.max(1, cl.hw - spreadX - 1);
+
+    for (var i = 0; i < count; i++) {
+      var m = new THREE.Mesh(foodGeo, foodMat);
+      m.position.set(
+        cx + (Math.random() - 0.5) * spreadX * 2,
+        cl.yTop - 0.3 - Math.random() * (0.6 + (1 - tight) * 2.5),
+        cz + (Math.random() - 0.5) * spreadZ * 2
+      );
+      scene.add(m);
+      foods.push({ mesh: m, seed: Math.random() * 6.28, sink: 0.28 + Math.random() * 0.22, gone: 0 });
+    }
+  }
+
+  function updateFoods(dt, t) {
+    for (var i = foods.length - 1; i >= 0; i--) {
+      var f = foods[i], p = f.mesh.position;
+      p.y -= f.sink * dt;
+      p.x += Math.sin(t * 1.7 + f.seed) * dt * 0.12;
+      p.z += Math.cos(t * 1.3 + f.seed) * dt * 0.09;
+      if (p.y < limitsAt(p.z).yBot + FOOD_REACH) {
+        f.gone += dt;
+        var k = 1 - f.gone / FOOD_FADE;
+        if (k <= 0.02) { eatFood(i); continue; }
+        f.mesh.scale.setScalar(k);
+      }
+      if (p.y < FLOOR + 0.12) p.y = FLOOR + 0.12;
+    }
+  }
+
+  // ── background ─────────────────────────────────────────────────────────
+  function fitBackground() {
+    var tex = scene.background;
+    if (!tex || !tex.isTexture || !tex.image || !tex.image.width) return;
+    var screenAspect = innerWidth / innerHeight;
+    var imageAspect = tex.image.width / tex.image.height;
+    if (screenAspect > imageAspect) {
+      var ry = imageAspect / screenAspect;
+      tex.repeat.set(1, ry);
+      tex.offset.set(0, (1 - ry) / 2);
+    } else {
+      var rx = screenAspect / imageAspect;
+      tex.repeat.set(rx, 1);
+      tex.offset.set((1 - rx) / 2, 0);
+    }
+  }
+
+  function applyBackground(url) {
+    if (!url) {
+      scene.background = new THREE.Color(0x0a3d5c);
+      return;
+    }
+    new THREE.TextureLoader().load(url, function (tex) {
+      tex.encoding = THREE.sRGBEncoding;
+      scene.background = tex;
+      fitBackground();
+    }, undefined, function () {
+      scene.background = new THREE.Color(0x0a3d5c);
+    });
+  }
+
+  // ── scene ──────────────────────────────────────────────────────────────
+  function init() {
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    document.body.appendChild(renderer.domElement);
+
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a3d5c);
+    scene.fog = new THREE.Fog(0x2e86a8, 18, 55);
+
+    camera = new THREE.PerspectiveCamera(FOV, innerWidth / innerHeight, 0.1, 300);
+    camera.position.fromArray(CAM_POS);
+    camera.lookAt(new THREE.Vector3().fromArray(CAM_TARGET));
+
+    scene.add(new THREE.HemisphereLight(0x8ec8e8, 0x1a3a4a, 0.7));
+    scene.add(new THREE.AmbientLight(0x446688, 0.5));
+    var spot = new THREE.SpotLight(0xe8f7ff, 2.5, 48, 0.62, 0.42, 1.1);
+    spot.position.set(0, 15.2, -1.5);
+    spot.target.position.set(0, 0, 0);
+    scene.add(spot, spot.target);
+    var fill = new THREE.DirectionalLight(0x9fc9e0, 0.6);
+    fill.position.set(12, 8, 20);
+    scene.add(fill);
+
+    applyBackground(BACKGROUNDS[currentBg]);
+
+    var draco = new THREE.DRACOLoader();
+    draco.setDecoderPath('vendor/draco/');
+    var gltfLoader = new THREE.GLTFLoader();
+    gltfLoader.setDRACOLoader(draco);
+    gltfLoader.load('assets/models/pack/robot/textured_mesh.glb', function (gltf) {
+      var model = gltf.scene;
+      var box = new THREE.Box3().setFromObject(model);
+      var center = box.getCenter(new THREE.Vector3());
+      model.position.sub(center);
+      robotTemplate = model;
+      var count = Math.max(3, pendingRobots);
+      for (var i = 0; i < count; i++) addRobot();
+      updateCount();
+    });
+
+    clock = new THREE.Clock();
+    addEventListener('resize', onResize);
+    animate();
+  }
+
+  function addRobot() {
+    if (robots.length >= MAX_ROBOTS) return;
+    if (!robotTemplate) { pendingRobots++; return; }
+    robots.push(new Robot());
+  }
+
+  function updateCount() {
+    var n = robots.length;
+    document.getElementById('m-count').textContent = n ? t('count')(n) : t('count0');
+  }
+
+  function animate() {
+    requestAnimationFrame(animate);
+    var dt = Math.min(clock.getDelta(), 0.05);
+    var ti = clock.elapsedTime;
+    for (var i = 0; i < robots.length; i++) robots[i].update(dt, ti);
+    updateFoods(dt, ti);
+    renderer.render(scene, camera);
+  }
+
+  function onResize() {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+    fitBackground();
+  }
+
+  // ── menu ───────────────────────────────────────────────────────────────
+  var menu = document.getElementById('menu');
+  var menuCard = document.getElementById('menu-card');
+  var menuMain = document.getElementById('menu-main');
+  var menuBgPick = document.getElementById('menu-bgpick');
+  var taphint = document.getElementById('taphint');
+  var menuUsed = false;
+
+  function showMenu() { menu.hidden = false; taphint.hidden = true; updateCount(); }
+  function hideMenu() { showMainView(); menu.hidden = true; if (!menuUsed) taphint.hidden = false; }
+  function toggleMenu() { menuUsed = true; if (menu.hidden) showMenu(); else hideMenu(); }
+  function showMainView() { menuMain.hidden = false; menuBgPick.hidden = true; }
+
+  document.addEventListener('click', function (e) {
+    if (menuCard.contains(e.target)) return;
+    toggleMenu();
+  });
+  addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !menu.hidden) hideMenu();
+  });
+
+  document.getElementById('m-close').onclick = function (e) { e.stopPropagation(); hideMenu(); };
+
+  document.getElementById('m-add').onclick = function (e) {
+    e.stopPropagation();
+    if (robots.length >= MAX_ROBOTS) return;
+    addRobot(); updateCount(); hideMenu();
+  };
+
+  document.getElementById('m-feed').onclick = function (e) {
+    e.stopPropagation(); hideMenu(); feedNow();
+  };
+
+  // ── background picker ─────────────────────────────────────────────────
+  document.getElementById('m-bg').onclick = function (e) {
+    e.stopPropagation();
+    menuMain.hidden = true; menuBgPick.hidden = false;
+    buildBgGrid();
+  };
+  document.getElementById('m-bgback').onclick = function (e) {
+    e.stopPropagation(); showMainView();
+  };
+
+  var bgGridBuilt = false;
+  function buildBgGrid() {
+    if (bgGridBuilt) return;
+    bgGridBuilt = true;
+    var grid = document.getElementById('bggrid');
+    BACKGROUNDS.forEach(function (url, idx) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      if (idx === currentBg) btn.className = 'active';
+      var img = document.createElement('img');
+      img.src = url; img.alt = ''; img.loading = 'lazy';
+      btn.appendChild(img);
+      btn.onclick = function (e) {
+        e.stopPropagation();
+        currentBg = idx;
+        applyBackground(url);
+        grid.querySelectorAll('button').forEach(function (b) { b.className = ''; });
+        btn.className = 'active';
+      };
+      grid.appendChild(btn);
+    });
+  }
+
+  // ── init ───────────────────────────────────────────────────────────────
+  mountLang();
+  applyLang();
+  init();
+})();
+</script>
+</body>
+</html>
