@@ -325,7 +325,6 @@
 <!-- Пути абсолютные: страница отдаётся и по /t/<id>, и по своему файловому
      адресу, относительные ссылки сломались бы на первом же. -->
 <script src="/vendor/three.min.js"></script>
-<script src="/vendor/RoomEnvironment.js"></script>
 <script src="/vendor/GLTFLoader.js"></script>
 <script src="/vendor/DRACOLoader.js"></script>
 <script src="/vendor/SkeletonUtils.js"></script>
@@ -485,13 +484,6 @@
     camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 300);
     camera.position.fromArray(CAM_POS);
     camera.lookAt(new THREE.Vector3().fromArray(CAM_TARGET));
-
-    // Отражения на чешуе берём из процедурной «комнаты»: без окружения
-    // PBR-материалы рыб выглядят плоско.
-    var pmrem = new THREE.PMREMGenerator(renderer);
-    pmrem.compileEquirectangularShader();
-    var envRT = pmrem.fromScene(new THREE.RoomEnvironment(), 0.04);
-    scene.environment = envRT.texture;
 
     buildLights();
 
@@ -733,15 +725,15 @@
         // скелет машет хвостом, а меш стоит доской. Заводской материал
         // покупной рыбы флаг получает от GLTFLoader, наш — нет.
         o.material = addCaustics(new THREE.MeshStandardMaterial({
-          map: spec.paintedTex, roughness: 0.55, metalness: 0.05,
-          side: THREE.DoubleSide, envMapIntensity: 0.5,
+          map: spec.paintedTex, roughness: 0.55, metalness: 0,
+          side: THREE.DoubleSide,
           skinning: !!o.isSkinnedMesh
         }), 0.5);
       } else {
         // рыба со своей заводской текстурой — показываем как есть,
         // только клонируем материал, чтобы каустика не текла в общий
         o.material = addCaustics(o.material.clone(), 0.5);
-        o.material.envMapIntensity = 0.5;
+        o.material.metalness = 0;
       }
       // Тело гнём сами, если его не гнёт клип: либо скелета нет вовсе, либо
       // в клипе шевелятся одни плавники (см. clipBeatHz). Скиннинг при этом
@@ -1299,16 +1291,15 @@
   }
 
   function buildLights() {
-    scene.add(new THREE.AmbientLight(0x223444, 0.16));
+    scene.add(new THREE.HemisphereLight(0x88ccff, 0x445533, 0.8));
+    scene.add(new THREE.AmbientLight(0x334455, 0.4));
 
-    // свет сверху, как сквозь толщу воды
     spot = new THREE.SpotLight(0xe8f7ff, 3.4, 48, 0.62, 0.42, 1.1);
     spot.position.set(0, 15.2, -1.5);
     spot.target.position.set(0, 0, 0);
     scene.add(spot, spot.target);
 
-    // подсветка спереди, чтобы рыбы не были силуэтами на фоне картинки
-    fill = new THREE.DirectionalLight(0x9fc9e0, 0.35);
+    fill = new THREE.DirectionalLight(0x9fc9e0, 0.6);
     fill.position.set(12, 8, 20);
     scene.add(fill);
   }

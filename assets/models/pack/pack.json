@@ -1,0 +1,122 @@
+[
+ {
+  "name": "clownfish",
+  "title": "Робот-клоун",
+  "titles": {
+   "ru": "Робот-клоун",
+   "en": "Clown Bot",
+   "pl": "Robot-błazen"
+  },
+  "url": "/assets/models/pack/robot/textured_mesh.glb"
+ },
+ {
+  "name": "bluetang",
+  "title": "Синий робот",
+  "titles": {
+   "ru": "Синий робот",
+   "en": "Blue Bot",
+   "pl": "Niebieski robot"
+  },
+  "url": "/assets/models/pack/robot/textured_mesh.glb"
+ },
+ {
+  "name": "chelmonrostratus",
+  "title": "Робот-стрелок",
+  "titles": {
+   "ru": "Робот-стрелок",
+   "en": "Sniper Bot",
+   "pl": "Robot-strzelec"
+  },
+  "url": "/assets/models/pack/robot/textured_mesh.glb"
+ },
+ {
+  "name": "clowntriggerfish",
+  "title": "Робот-триггер",
+  "titles": {
+   "ru": "Робот-триггер",
+   "en": "Trigger Bot",
+   "pl": "Robot-spust"
+  },
+  "url": "/assets/models/pack/robot/textured_mesh.glb"
+ },
+ {
+  "name": "frenchangelfish",
+  "title": "Робот-ангел",
+  "titles": {
+   "ru": "Робот-ангел",
+   "en": "Angel Bot",
+   "pl": "Robot-anioł"
+  },
+  "url": "/assets/models/pack/robot/textured_mesh.glb"
+ },
+ {
+  "name": "fusilierfish",
+  "title": "Робот-разведчик",
+  "titles": {
+   "ru": "Робот-разведчик",
+   "en": "Scout Bot",
+   "pl": "Robot-zwiadowca"
+  },
+  "url": "/assets/models/pack/robot/textured_mesh.glb"
+ },
+ {
+  "name": "blackspottedsweetlips",
+  "title": "Робот-страж",
+  "titles": {
+   "ru": "Робот-страж",
+   "en": "Guardian Bot",
+   "pl": "Robot-strażnik"
+  },
+  "url": "/assets/models/pack/robot/textured_mesh.glb"
+ },
+ {
+  "name": "coralgrouper",
+  "title": "Робот-охотник",
+  "titles": {
+   "ru": "Робот-охотник",
+   "en": "Hunter Bot",
+   "pl": "Robot-łowca"
+  },
+  "url": "/assets/models/pack/robot/textured_mesh.glb"
+ },
+ {
+  "name": "browntang",
+  "title": "Робот-следопыт",
+  "titles": {
+   "ru": "Робот-следопыт",
+   "en": "Tracker Bot",
+   "pl": "Robot-tropiciel"
+  },
+  "url": "/assets/models/pack/robot/textured_mesh.glb"
+ },
+ {
+  "name": "bicolorangelfish",
+  "title": "Робот-защитник",
+  "titles": {
+   "ru": "Робот-защитник",
+   "en": "Defender Bot",
+   "pl": "Robot-obrońca"
+  },
+  "url": "/assets/models/pack/robot/textured_mesh.glb"
+ },
+ {
+  "name": "bluecheekbutterflyfish",
+  "title": "Робот-бабочка",
+  "titles": {
+   "ru": "Робот-бабочка",
+   "en": "Butterfly Bot",
+   "pl": "Robot-motyl"
+  },
+  "url": "/assets/models/pack/robot/textured_mesh.glb"
+ },
+ {
+  "name": "discus1",
+  "title": "Робот-диск",
+  "titles": {
+   "ru": "Робот-диск",
+   "en": "Disc Bot",
+   "pl": "Robot-dysk"
+  },
+  "url": "/assets/models/pack/robot/textured_mesh.glb"
+ }
+]

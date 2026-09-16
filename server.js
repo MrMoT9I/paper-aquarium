@@ -818,7 +818,7 @@ function handleTankApi(req, res, t, url) {
           id: fid, type: 'pack', model: model.name, title: model.title,
           created: new Date().toISOString()
         }));
-        console.log(`+ рыбка из пака ${model.name} в ${t.id} — всего ${listFish(t).length}`);
+        console.log(`+ робот из пака ${model.name} в ${t.id} — всего ${listFish(t).length}`);
         return send(res, 200, JSON.stringify({ ok: true, id: fid }));
       }
 
@@ -826,7 +826,7 @@ function handleTankApi(req, res, t, url) {
         return send(res, 400, '{"error":"нужны kind и texture (dataURL png/jpeg)"}');
       }
       if (tooHeavy(data.texture, LIMITS.fishBytes)) {
-        return send(res, 413, '{"error":"картинка рыбки слишком тяжёлая"}');
+        return send(res, 413, '{"error":"картинка робота слишком тяжёлая"}');
       }
       ensureTank(t);
       const png = Buffer.from(data.texture.split(',')[1], 'base64');
@@ -834,7 +834,7 @@ function handleTankApi(req, res, t, url) {
       writeData(path.join(t.fish, fid + '.json'), JSON.stringify({
         id: fid, kind: String(data.kind), created: new Date().toISOString()
       }));
-      console.log(`+ рыбка ${data.kind} в ${t.id} (${Math.round(png.length / 1024)} КБ) — всего ${listFish(t).length}`);
+      console.log(`+ робот ${data.kind} в ${t.id} (${Math.round(png.length / 1024)} КБ) — всего ${listFish(t).length}`);
       send(res, 200, JSON.stringify({ ok: true, id: fid }));
     });
   }
@@ -843,7 +843,7 @@ function handleTankApi(req, res, t, url) {
   if (req.method === 'DELETE' && delMatch) {
     if (!authed(req, t, ev)) return denied(res, t, ev);
     const n = trashFish(t, delMatch[1]);
-    if (n) console.log(`- рыбка ${delMatch[1]} из ${t.id} → в корзину`);
+    if (n) console.log(`- робот ${delMatch[1]} из ${t.id} → в корзину`);
     return send(res, n ? 200 : 404, JSON.stringify({ ok: !!n }));
   }
 
@@ -851,7 +851,7 @@ function handleTankApi(req, res, t, url) {
     if (!authed(req, t, ev)) return denied(res, t, ev);
     const list = listFish(t);
     list.forEach((f) => trashFish(t, f.id));
-    console.log(`аквариум ${t.id} очищен, ${list.length} рыбок → в корзину`);
+    console.log(`аквариум ${t.id} очищен, ${list.length} роботов → в корзину`);
     return send(res, 200, JSON.stringify({ ok: true, removed: list.length }));
   }
 
@@ -924,7 +924,7 @@ function handleTankApi(req, res, t, url) {
 
   if (req.method === 'POST' && url === '/feed') {
     ev.feedAt = Date.now();
-    console.log(`🐟 корм насыпан в ${t.id}`);
+    console.log(`🤖 подзарядка в ${t.id}`);
     return send(res, 200, JSON.stringify({ ok: true, feedAt: ev.feedAt }));
   }
 
@@ -1036,7 +1036,7 @@ function pageFor(url) {
 // уезжает и .git, и детские рисунки из data/, и купленный пак моделей —
 // папка с ним лежит в том же каталоге проекта.
 const STATIC_DIRS = ['/assets/', '/vendor/', '/demos/', '/tools/'];
-const STATIC_FILES = ['/print.html', '/terms.html', '/favicon.ico'];
+const STATIC_FILES = ['/print.html', '/terms.html', '/favicon.ico', '/live.html'];
 // Из data наружу смотрят только две вещи: свои фоны и снимок сцены.
 // Текстуры рыбок отдаёт API, всё остальное — не для сети.
 const DATA_FILE_RE = /^\/data\/tanks\/([^/]+)\/(?:preview\.jpg|backgrounds\/[\w.-]+)$/;
