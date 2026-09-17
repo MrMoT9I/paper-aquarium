@@ -11,8 +11,15 @@
 # Сеть web общая и живёт отдельно от этого файла — её держит Traefik.
 # Проверить, что она на месте: docker network ls | grep web
 
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 services:
   aqua:
+    logging: *default-logging
     build: .
     image: aqua:latest
     container_name: aqua
