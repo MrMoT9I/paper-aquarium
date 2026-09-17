@@ -37,6 +37,7 @@
 //   DELETE …/fish/<fid>            🔒 — удалить одну рыбку
 //   DELETE …/fish                  🔒 — очистить аквариум
 //   GET    …/settings                 — настройки сцены + метки событий
+//   GET    …/events                   — поток событий (SSE): settings и fish при изменении
 //   POST   …/settings {…}             — изменить настройки (фон)
 //   POST   …/feed                     — покормить
 //   GET    …/backgrounds              — фоны [{name, url, custom}]
@@ -691,6 +692,119 @@ function settingsPayload(t, ev) {
   return { body, etag: `W/"s${ver}"` };
 }
 
+// ── события: сервер сам сообщает экрану об изменениях ──────────────────────
+// Даже с кэшем и 304 опросы оставались главной нагрузкой: экран спрашивал
+// /settings каждые 3 с и /fish каждые 5 с, сотня открытых экранов — это
+// 3–4 тысячи запросов в минуту, 97% всего трафика сервера, и каждый из них
+// будил Traefik, node и писал строку в лог. Ответ при этом почти всегда
+// «ничего не изменилось».
+//
+// Теперь экран открывает один поток GET …/events (Server-Sent Events) и
+// молчит. Сервер присылает событие, когда что-то поменялось, и пустой
+// комментарий-пинг раз в SUB_PING_MS, чтобы соединение не закрыли NAT и
+// прокси по бездействию. Старые /settings и /fish остаются: это запасной
+// путь для браузеров без EventSource и на случай, если потоку отказали.
+//
+// Об изменениях сервер узнаёт двумя путями. Быстрый — notify() в местах
+// записи: корм и новая рыбка появляются на экране сразу. Надёжный — тик раз
+// в SUB_TICK_MS по аквариумам с подписчиками: он сверяет те же mtime, что и
+// кэш опросов, и потому видит правки мимо сервера (панель модерации правит
+// файлы по ssh). Тик дёшев: один-два statSync на аквариум, и только на те,
+// что сейчас кто-то смотрит.
+//
+// Пределы — от зацикленного клиента и от чужого любопытства: на аквариум и
+// на всех. Сверх предела ответ 503, и клиент уходит в редкий опрос.
+const SUB_PER_TANK = 50;
+const SUB_TOTAL = 2000;
+const SUB_TICK_MS = 2000;
+const SUB_PING_MS = 25000;
+const subscribers = new Map();   // id → { t, ev, set: Set<res>, fish: etag, settings: etag }
+let subTotal = 0;
+
+function sseWrite(res, event, payload) {
+  res.write(`event: ${event}\nid: ${payload.etag}\ndata: ${payload.body}\n\n`);
+}
+
+// Рассылает подписчикам аквариума то, что изменилось с прошлой рассылки.
+// Метка версии общая на аквариум, а не на клиента: все смотрят одно и то же,
+// а новичок получает полный снимок при подключении.
+function pushTank(sub) {
+  if (!sub.set.size) return;
+  // Аквариум могли убрать мимо сервера (панель модерации переносит папки по
+  // ssh). Тогда потоки закрываем, а не собираем ответ: settingsPayload по
+  // пути дописал бы фон и тем самым воскресил бы пустой аквариум.
+  if (!fs.existsSync(sub.t.dir)) return dropSubscribers(sub.t.id);
+  let fish, settings;
+  try {
+    fish = fishPayload(sub.t);
+    settings = settingsPayload(sub.t, sub.ev);
+  } catch (e) {
+    return;   // не собрался ответ — попробуем на следующем тике
+  }
+  const changed = [];
+  if (fish.etag !== sub.fish) { sub.fish = fish.etag; changed.push(['fish', fish]); }
+  if (settings.etag !== sub.settings) { sub.settings = settings.etag; changed.push(['settings', settings]); }
+  if (!changed.length) return;
+  for (const res of sub.set) {
+    for (const [event, payload] of changed) sseWrite(res, event, payload);
+  }
+}
+
+function notify(t) {
+  const sub = subscribers.get(t.id);
+  if (sub) pushTank(sub);
+}
+
+// Аквариум удалили — потоки закрываем. Браузер переподключится, получит 404
+// и по правилам EventSource больше пробовать не станет.
+function dropSubscribers(id) {
+  const sub = subscribers.get(id);
+  if (!sub) return;
+  subscribers.delete(id);
+  const set = sub.set;
+  sub.set = new Set();   // иначе обработчик close списал бы каждого второй раз
+  for (const res of set) { subTotal--; res.end(); }
+}
+
+function subscribe(req, res, t, ev) {
+  let sub = subscribers.get(t.id);
+  if (subTotal >= SUB_TOTAL || (sub && sub.set.size >= SUB_PER_TANK)) {
+    return send(res, 503, '{"error":"слишком много открытых экранов"}');
+  }
+  if (!sub) {
+    sub = { t, ev, set: new Set(), fish: null, settings: null };
+    subscribers.set(t.id, sub);
+  }
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-store',
+    // Прокси с буферизацией ответа (nginx) держали бы события у себя до
+    // конца потока, то есть навсегда. Traefik и так не буферизует.
+    'X-Accel-Buffering': 'no'
+  });
+  if (res.socket) res.socket.setNoDelay(true);
+  res.write(`retry: 5000\n\n`);
+  // Снимок — всегда, даже если у аквариума ничего не менялось: экран только
+  // что открылся или переподключился и не знает текущего состояния.
+  const fish = fishPayload(t), settings = settingsPayload(t, ev);
+  sub.fish = fish.etag; sub.settings = settings.etag;
+  sseWrite(res, 'settings', settings);
+  sseWrite(res, 'fish', fish);
+
+  sub.set.add(res); subTotal++;
+  res.on('error', () => {});   // клиент оборвал связь на полуслове — это не авария
+  req.on('close', () => {
+    if (!sub.set.delete(res)) return;
+    subTotal--;
+    if (!sub.set.size) subscribers.delete(t.id);
+  });
+}
+
+setInterval(() => { for (const sub of subscribers.values()) pushTank(sub); }, SUB_TICK_MS).unref();
+setInterval(() => {
+  for (const sub of subscribers.values()) for (const res of sub.set) res.write(': ping\n\n');
+}, SUB_PING_MS).unref();
+
 // ── API внутри аквариума ───────────────────────────────────────────────────
 function handleTankApi(req, res, t, url) {
   // Аквариум заводится только явно, через POST /api/tanks. Значит нет папки —
@@ -779,10 +893,15 @@ function handleTankApi(req, res, t, url) {
       fs.mkdirSync(TANKS_TRASH, { recursive: true });
       fs.renameSync(t.dir, path.join(TANKS_TRASH, t.id + '-' + Date.now()));
     }
+    dropSubscribers(t.id);
     events.delete(t.id);
     pollCache.delete(t.id);
     console.log(`- аквариум ${t.id} → в корзину (data/trash-tanks)`);
     return send(res, 200, '{"ok":true}');
+  }
+
+  if (req.method === 'GET' && url === '/events') {
+    return subscribe(req, res, t, ev);
   }
 
   if (req.method === 'GET' && url === '/fish') {
@@ -819,6 +938,7 @@ function handleTankApi(req, res, t, url) {
           created: new Date().toISOString()
         }));
         console.log(`+ рыбка из пака ${model.name} в ${t.id} — всего ${listFish(t).length}`);
+        notify(t);
         return send(res, 200, JSON.stringify({ ok: true, id: fid }));
       }
 
@@ -835,6 +955,7 @@ function handleTankApi(req, res, t, url) {
         id: fid, kind: String(data.kind), created: new Date().toISOString()
       }));
       console.log(`+ рыбка ${data.kind} в ${t.id} (${Math.round(png.length / 1024)} КБ) — всего ${listFish(t).length}`);
+      notify(t);
       send(res, 200, JSON.stringify({ ok: true, id: fid }));
     });
   }
@@ -843,7 +964,7 @@ function handleTankApi(req, res, t, url) {
   if (req.method === 'DELETE' && delMatch) {
     if (!authed(req, t, ev)) return denied(res, t, ev);
     const n = trashFish(t, delMatch[1]);
-    if (n) console.log(`- рыбка ${delMatch[1]} из ${t.id} → в корзину`);
+    if (n) { console.log(`- рыбка ${delMatch[1]} из ${t.id} → в корзину`); notify(t); }
     return send(res, n ? 200 : 404, JSON.stringify({ ok: !!n }));
   }
 
@@ -852,6 +973,7 @@ function handleTankApi(req, res, t, url) {
     const list = listFish(t);
     list.forEach((f) => trashFish(t, f.id));
     console.log(`аквариум ${t.id} очищен, ${list.length} рыбок → в корзину`);
+    notify(t);
     return send(res, 200, JSON.stringify({ ok: true, removed: list.length }));
   }
 
@@ -898,7 +1020,7 @@ function handleTankApi(req, res, t, url) {
     // Если удалили фон, который сейчас стоит в сцене, — выдаём случайный,
     // иначе аквариум остался бы с битой ссылкой до следующей смены настроек.
     const s = readSettings(t);
-    if (s.background === name) writeSettings(t, { background: randomBackground() });
+    if (s.background === name) { writeSettings(t, { background: randomBackground() }); notify(t); }
     console.log(`- фон ${name} из ${t.id} удалён`);
     return send(res, 200, '{"ok":true}');
   }
@@ -918,6 +1040,7 @@ function handleTankApi(req, res, t, url) {
           ? merged.background : cur.background
       };
       writeSettings(t, clean);
+      notify(t);
       send(res, 200, JSON.stringify(clean));
     });
   }
@@ -925,6 +1048,7 @@ function handleTankApi(req, res, t, url) {
   if (req.method === 'POST' && url === '/feed') {
     ev.feedAt = Date.now();
     console.log(`🐟 корм насыпан в ${t.id}`);
+    notify(t);
     return send(res, 200, JSON.stringify({ ok: true, feedAt: ev.feedAt }));
   }
 

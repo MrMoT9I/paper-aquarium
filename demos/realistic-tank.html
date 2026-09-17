@@ -501,8 +501,7 @@
     // Моделей на старте не грузим: своих рыб у аквариума нет, каждая приходит
     // из детского рисунка или из админки и тянет ровно свой файл. Пустой
     // аквариум должен открываться сразу.
-    initPainted();
-    initSettings();
+    initPainted();   // заодно запускает поток событий, см. startUpdates()
     wantShot(3.5);
     if (PACK) loadPack();
     var l = document.getElementById('loading');
@@ -1210,8 +1209,16 @@
     return holder;
   }
 
+  // Разовый запрос списка: нужен сразу после того, как рыбку выпустили с
+  // этого же экрана, и как запасной опрос, когда поток событий недоступен.
   function pollPainted() {
-    fetch(Tank.api + '/fish').then(function (r) { return r.json(); }).then(function (list) {
+    fetch(Tank.api + '/fish').then(function (r) { return r.json(); })
+      .then(applyPainted)
+      .catch(function () { /* сервер без API — просто нет рыбок */ });
+  }
+
+  // Сводит сцену с присланным списком: новых подселяет, пропавших убирает.
+  function applyPainted(list) {
       if (!Array.isArray(list)) return;
       setFishCount(list.length);
       var alive = {};
@@ -1264,11 +1271,11 @@
           });
         });
       });
-    }).catch(function () { /* сервер без API — просто нет рыбок */ });
   }
 
   // Манифест раскрасок — единственный список видов. Пока он не приехал,
-  // рыбок не подселяем: иначе первый опрос отбросит их все как «нет шаблона».
+  // рыбок не подселяем: иначе первый список отбросит их все как «нет шаблона».
+  // Поэтому и поток событий, и опросы стартуют только отсюда.
   function initPainted() {
     fetch('/assets/coloring/manifest.json')
       .then(function (r) { return r.json(); })
@@ -1276,10 +1283,7 @@
         m.fish.forEach(function (f) { paintedSpec[f.name] = { length: f.length }; });
       })
       .catch(function () { console.error('не загрузился манифест раскрасок'); })
-      .then(function () {
-        pollPainted();
-        setInterval(pollPainted, 5000);
-      });
+      .then(startUpdates);
   }
 
   // ── смотрины купленного пака ─────────────────────────────────────────────
@@ -1464,10 +1468,97 @@
       .catch(function () { /* сервер без API — остаются значения по умолчанию */ });
   }
 
-  function initSettings() {
-    pollSettings();
-    setInterval(pollSettings, 3000);
+  // ── как экран узнаёт об изменениях ───────────────────────────────────────
+  // Раньше экран спрашивал сервер каждые 3 и 5 секунд, и сотня открытых
+  // экранов давала тысячи запросов в минуту с ответом «ничего нового».
+  // Теперь основной путь — один поток событий (…/events, EventSource):
+  // сервер сам присылает settings и fish, когда они меняются, и снимок обоих
+  // при каждом подключении, так что после обрыва догонять нечего — браузер
+  // переподключается сам.
+  //
+  // Опросы остались как запасной путь, но редкие: для браузеров без
+  // EventSource, при отказе сервера (503 — слишком много экранов) и когда
+  // поток открылся, а снимок так и не пришёл — значит, между нами прокси,
+  // который копит ответ у себя. Обрывы связи и перезапуск сервера запасного
+  // пути не включают: браузер переподключается сам по retry с сервера, а
+  // пока сервер лежит, опросы не помогли бы тоже. Из запасного режима раз в
+  // пять минут пробуем поток снова. Скрытая вкладка не держит ни поток, ни
+  // опросы: телевизор виден всегда, а фоновые вкладки на телефонах — просто
+  // лишние соединения.
+  var POLL_SETTINGS_MS = 15000, POLL_FISH_MS = 10000;
+  var LIVE_RETRY_MS = 5 * 60 * 1000, LIVE_SILENT_MS = 10000;
+  var live = null, pollTimers = [], liveRetry = null, liveWatch = null;
+
+  function startPolling() {
+    stopPolling();
+    pollSettings(); pollPainted();
+    pollTimers = [setInterval(pollSettings, POLL_SETTINGS_MS), setInterval(pollPainted, POLL_FISH_MS)];
+    if (window.EventSource && !liveRetry) {
+      liveRetry = setTimeout(function () { liveRetry = null; openLive(); }, LIVE_RETRY_MS);
+    }
   }
+
+  function stopPolling() {
+    pollTimers.forEach(clearInterval);
+    pollTimers = [];
+  }
+
+  function openLive() {
+    if (live) return;
+    live = new EventSource(Tank.api + '/events');
+    live.addEventListener('settings', function (e) {
+      liveAlive();
+      try { applySettings(JSON.parse(e.data)); } catch (err) { /* битое событие — ждём следующего */ }
+    });
+    live.addEventListener('fish', function (e) {
+      liveAlive();
+      try { applyPainted(JSON.parse(e.data)); } catch (err) { /* битое событие — ждём следующего */ }
+    });
+    live.onopen = function () {
+      stopPolling();
+      // Сервер шлёт снимок сразу после подключения; открытый, но молчащий
+      // поток — сломанный, ждать его дальше бессмысленно.
+      clearTimeout(liveWatch);
+      liveWatch = setTimeout(giveUpLive, LIVE_SILENT_MS);
+    };
+    live.onerror = function () {
+      // CLOSED — браузер сдался сам (ответ не 200: 503 или аквариума нет).
+      // Всё остальное он переживёт переподключением.
+      if (live && live.readyState === EventSource.CLOSED) giveUpLive();
+    };
+  }
+
+  function liveAlive() {
+    clearTimeout(liveWatch);
+    liveWatch = null;
+  }
+
+  function giveUpLive() {
+    closeLive();
+    startPolling();
+  }
+
+  function closeLive() {
+    liveAlive();
+    if (!live) return;
+    live.close();
+    live = null;
+  }
+
+  function startUpdates() {
+    if (document.hidden) return;
+    if (window.EventSource) openLive(); else startPolling();
+  }
+
+  function stopUpdates() {
+    closeLive();
+    stopPolling();
+    if (liveRetry) { clearTimeout(liveRetry); liveRetry = null; }
+  }
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) stopUpdates(); else startUpdates();
+  });
 
   // ── меню ─────────────────────────────────────────────────────────────────
   // Аквариум во весь экран без единой кнопки — красиво, но это тупик: человек,
