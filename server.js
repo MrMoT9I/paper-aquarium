@@ -1188,6 +1188,56 @@ function staticFor(url) {
   return file.startsWith(ROOT + path.sep) ? file : null;
 }
 
+// ── для поисковиков ────────────────────────────────────────────────────────
+// В поиске должна быть витрина проекта, а не детские аквариумы: /t/… — это
+// чьи-то рисунки по приглашению, их прячем и в robots.txt, и заголовком
+// X-Robots-Tag (одного robots.txt мало: страницу, на которую кто-то сослался,
+// Google покажет и без обхода — голым адресом).
+const SITE = process.env.SITE_URL || 'https://aquarium.mrmot9i.com';
+
+// IndexNow: Яндекс и Bing переобходят страницу по нашему пингу, без панели
+// и аккаунта. Ключ не секрет — по протоколу он лежит в открытую по адресу
+// /<ключ>.txt, это доказательство, что пингует хозяин сайта.
+// Пинг после деплоя — tools/indexnow.js.
+const INDEXNOW_KEY = '0385304a0c472d764b5aeb6cdd5bd8c5';
+const SITEMAP_PAGES = ['/', '/print.html', '/terms.html'];
+
+function seoFile(url) {
+  if (url === '/robots.txt') {
+    return {
+      type: 'text/plain; charset=utf-8',
+      body: [
+        'User-agent: *',
+        'Disallow: /t/',
+        'Disallow: /api/',
+        'Disallow: /data/',
+        'Disallow: /tools/',
+        'Disallow: /demos/',
+        '',
+        `Sitemap: ${SITE}/sitemap.xml`,
+        ''
+      ].join('\n')
+    };
+  }
+  if (url === '/sitemap.xml') {
+    const urls = SITEMAP_PAGES.map((p) => {
+      const file = path.join(ROOT, p === '/' ? 'index.html' : p);
+      const day = fs.statSync(file).mtime.toISOString().slice(0, 10);
+      return `  <url><loc>${SITE}${p}</loc><lastmod>${day}</lastmod></url>`;
+    });
+    return {
+      type: 'application/xml; charset=utf-8',
+      body: '<?xml version="1.0" encoding="UTF-8"?>\n' +
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+        urls.join('\n') + '\n</urlset>\n'
+    };
+  }
+  if (url === `/${INDEXNOW_KEY}.txt`) {
+    return { type: 'text/plain; charset=utf-8', body: INDEXNOW_KEY };
+  }
+  return null;
+}
+
 // Пережатые двойники лежат в подпапке webp/ рядом с оригиналом, а не бок о бок
 // с ним: listBackgrounds() читает папку целиком и показал бы каждый фон дважды.
 // Имя файла в настройках аквариума остаётся прежним («01-0.png») — подменяем
@@ -1238,6 +1288,12 @@ http.createServer((req, res) => {
     return res.end();
   }
 
+  const seo = seoFile(url);
+  if (seo) {
+    res.writeHead(200, { 'Content-Type': seo.type, 'Cache-Control': 'public, max-age=3600' });
+    return res.end(seo.body);
+  }
+
   const page = pageFor(url);
   let file = page ? path.join(ROOT, page) : staticFor(url);
 
@@ -1259,6 +1315,8 @@ http.createServer((req, res) => {
   // трёхмегабайтной картинке дороже, чем отдать её.
   const etag = `W/"${stat.size.toString(16)}-${Math.trunc(stat.mtimeMs).toString(16)}"`;
   const headers = { 'Cache-Control': cacheControl(ext, url), ETag: etag };
+  // Всё, кроме главной, открывается по адресу аквариума — в поиск не пускаем.
+  if (page && page !== 'index.html') headers['X-Robots-Tag'] = 'noindex, nofollow';
   // Без Vary кэш-посредник отдал бы webp тому, кто его не понимает.
   if (canWebp) headers.Vary = 'Accept';
 

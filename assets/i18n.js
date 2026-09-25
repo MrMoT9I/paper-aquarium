@@ -33,6 +33,11 @@
 
       // ── главная ──
       'home.title': 'Мои аквариумы',
+      'home.doctitle': 'Онлайн-аквариум: раскрась рыбку — и она поплывёт',
+      'home.h1': 'Онлайн-аквариум из детских рисунков',
+      'home.about.title': 'Что такое онлайн-аквариум',
+      'home.about.p1': 'Это живой аквариум в браузере, где плавают рыбки, нарисованные детьми. Распечатай раскраску, раскрась рыбку фломастерами или карандашами, сфотографируй телефоном — через несколько секунд она оживает и уплывает в аквариум на экране. Похоже на интерактивный аквариум teamLab, только дома: хватит телефона, принтера и телевизора или ноутбука.',
+      'home.about.p2': 'Бесплатно, без регистрации и рекламы. Открой аквариум на большом экране по коду и запускай туда рыбок всей семьёй, в классе или на детском празднике. <a href="/print.html">Раскраски рыбок для печати</a> — здесь.',
       'home.lead': 'Распечатай шаблон, раскрась фломастерами, сфотографируй — и рыбка поплывёт. У каждого ребёнка может быть свой аквариум.',
       'home.empty': 'Пока ни одного аквариума. Создай первый — это займёт секунду.',
       'home.new': 'Новый аквариум',
@@ -280,6 +285,11 @@
       'lang.name': 'English',
 
       'home.title': 'My aquariums',
+      'home.doctitle': 'Online aquarium: colour a fish and watch it swim',
+      'home.h1': 'An online aquarium of kids’ drawings',
+      'home.about.title': 'What is the online aquarium',
+      'home.about.p1': 'It is a living aquarium in your browser where fish drawn by children swim. Print a colouring sheet, colour the fish with markers or pencils, take a photo with your phone — a few seconds later it comes to life and swims into the aquarium on screen. Like the teamLab interactive aquarium, but at home: a phone, a printer and a TV or laptop are enough.',
+      'home.about.p2': 'Free, no sign-up and no ads. Open the aquarium on a big screen with a code and send fish into it with the whole family, in class or at a kids’ party. <a href="/print.html">Printable fish colouring pages</a> are here.',
       'home.lead': 'Print a sheet, colour it with markers, take a photo — and the fish starts swimming. Every child can have their own aquarium.',
       'home.empty': 'No aquariums yet. Create the first one — it takes a second.',
       'home.new': 'New aquarium',
@@ -517,6 +527,11 @@
       'lang.name': 'Polski',
 
       'home.title': 'Moje akwaria',
+      'home.doctitle': 'Akwarium online: pokoloruj rybkę i patrz, jak pływa',
+      'home.h1': 'Akwarium online z dziecięcych rysunków',
+      'home.about.title': 'Czym jest akwarium online',
+      'home.about.p1': 'To żywe akwarium w przeglądarce, w którym pływają rybki narysowane przez dzieci. Wydrukuj kolorowankę, pokoloruj rybkę mazakami lub kredkami, zrób zdjęcie telefonem — po kilku sekundach ożywa i wpływa do akwarium na ekranie. Jak interaktywne akwarium teamLab, tylko w domu: wystarczy telefon, drukarka i telewizor lub laptop.',
+      'home.about.p2': 'Za darmo, bez rejestracji i reklam. Otwórz akwarium na dużym ekranie kodem i wpuszczajcie rybki całą rodziną, w klasie albo na przyjęciu dla dzieci. <a href="/print.html">Kolorowanki z rybkami do druku</a> — tutaj.',
       'home.lead': 'Wydrukuj szablon, pokoloruj mazakami, zrób zdjęcie — i rybka popłynie. Każde dziecko może mieć własne akwarium.',
       'home.empty': 'Jeszcze żadnego akwarium. Załóż pierwsze — to chwila.',
       'home.new': 'Nowe akwarium',

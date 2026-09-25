@@ -4,6 +4,7 @@
 
 !server.js
 !package.json
+!favicon.ico
 !*.html
 !assets
 !vendor

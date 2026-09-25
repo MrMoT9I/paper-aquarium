@@ -3,7 +3,47 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title data-t="home.title">Мои аквариумы</title>
+<!-- Заголовок и описание — то, что видят поиск и превью ссылок. Текст
+     в разметке русский, а не пустой: поисковик читает HTML, до переводов
+     из i18n.js он может и не дойти. -->
+<title data-t="home.doctitle">Онлайн-аквариум: раскрась рыбку — и она поплывёт</title>
+<meta name="description" content="Живой онлайн-аквариум из детских рисунков: распечатай раскраску, раскрась рыбку, сфотографируй телефоном — и она поплывёт на экране. Бесплатно, без регистрации, на телевизоре, ноутбуке и телефоне.">
+<link rel="canonical" href="https://aquarium.mrmot9i.com/">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="/assets/favicon-120.png">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Онлайн-аквариум">
+<meta property="og:url" content="https://aquarium.mrmot9i.com/">
+<meta property="og:title" content="Онлайн-аквариум: раскрась рыбку — и она поплывёт">
+<meta property="og:description" content="Распечатай раскраску, раскрась рыбку, сфотографируй — и она поплывёт в аквариуме на экране. Бесплатно и без регистрации.">
+<meta property="og:image" content="https://aquarium.mrmot9i.com/assets/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="ru_RU">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Онлайн-аквариум",
+  "alternateName": ["Paper Aquarium", "Бумажный аквариум"],
+  "url": "https://aquarium.mrmot9i.com/",
+  "description": "Живой аквариум в браузере, где плавают рыбки, раскрашенные детьми на бумаге.",
+  "applicationCategory": "EntertainmentApplication",
+  "operatingSystem": "Any",
+  "inLanguage": ["ru", "en", "pl"],
+  "isAccessibleForFree": true,
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "image": "https://aquarium.mrmot9i.com/assets/og.jpg",
+  "author": {
+    "@type": "Person",
+    "name": "MrMoT9I",
+    "url": "https://github.com/MrMoT9I",
+    "sameAs": ["https://instagram.com/mrmot9i", "https://github.com/MrMoT9I"]
+  }
+}
+</script>
 <style>
   :root {
     --ink: #eaf6ff;
@@ -268,6 +308,13 @@
   .author .soc b { display: block; font-size: 13px; font-weight: 600; line-height: 1.3; }
   .author .soc i { display: block; font-style: normal; font-size: 12px; color: var(--muted); line-height: 1.3; }
 
+  /* Абзац «что это» — для того, кто пришёл из поиска и не видел рилса,
+     и для самого поиска: без него на странице нет ни слова о проекте. */
+  .about { margin: 34px 0 0; max-width: 760px; color: var(--muted); font-size: 14px; }
+  .about h2 { margin: 0 0 8px; font-size: 16px; font-weight: 600; color: var(--ink); }
+  .about p { margin: 0 0 8px; }
+  .about a { color: var(--accent); }
+
   /* На телефоне три элемента в строку не встают, и перенос рвёт блок
      посередине: автора — на свою строку, плитки — равными колонками,
      которых на совсем узком экране остаётся одна. */
@@ -291,14 +338,14 @@
 
   <div class="head">
     <header>
-      <h1 data-t="home.title">Мои аквариумы</h1>
-      <p data-t="home.lead"></p>
+      <h1 data-t="home.h1">Онлайн-аквариум из детских рисунков</h1>
+      <p data-t="home.lead">Распечатай шаблон, раскрась фломастерами, сфотографируй — и рыбка поплывёт. У каждого ребёнка может быть свой аквариум.</p>
 
       <!-- Виден всем и всегда, включая Android и телевизор: это не только
            кнопка установки, но и сообщение «так тоже можно». -->
       <a class="ios" href="https://apps.apple.com/app/id6809368349?ct=home">
         <img src="/assets/app-icon.webp" alt="" width="40" height="40">
-        <span class="txt"><b data-t="home.ios.title"></b><br><i data-t="home.ios.sub"></i></span>
+        <span class="txt"><b data-t="home.ios.title">Аквариум для iPhone и iPad</b><br><i data-t="home.ios.sub">То же самое, но работает без интернета</i></span>
         <span class="badge"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>App Store</span>
       </a>
     </header>
@@ -307,11 +354,11 @@
          телевизора, и внизу страницы его искали дольше всего. -->
     <div class="bycode">
       <div class="langrow"><span id="lang"></span></div>
-      <h3 data-t="home.bycode.title"></h3>
-      <p data-t="home.bycode.hint"></p>
+      <h3 data-t="home.bycode.title">Открыть аквариум по коду</h3>
+      <p data-t="home.bycode.hint">Код нужен только на новом устройстве — на этом аквариумы запоминаются сами. Подойдут и пять цифр из «Открыть на другом экране».</p>
       <form id="code-form">
         <input id="code" data-t-ph="home.bycode.placeholder" autocomplete="off" spellcheck="false" maxlength="10">
-        <button class="btn" type="submit" data-t="home.bycode.open"></button>
+        <button class="btn" type="submit" data-t="home.bycode.open">Открыть</button>
       </form>
     </div>
   </div>
@@ -320,40 +367,46 @@
        в развороте: новичку без аквариумов открыта сама, дальше — строка,
        которую всегда можно раскрыть заново. -->
   <details class="how" id="how">
-    <summary><span class="chev">▸</span><span data-t="home.how.title"></span></summary>
+    <summary><span class="chev">▸</span><span data-t="home.how.title">Как это работает</span></summary>
     <div class="howbody">
       <!-- Большой экран — вторым шагом: сначала настроить сцену, а потом
            творить, и рыбка появится на телевизоре прямо на глазах. -->
       <ol class="hsteps">
-        <li><span class="ico">🌊</span><span data-t="home.how.s0"></span></li>
-        <li><span class="ico">📺</span><span data-t="home.how.s4"></span></li>
-        <li><span class="ico">🖨️</span><span data-t="home.how.s1"></span></li>
-        <li><span class="ico">🖍️</span><span data-t="home.how.s2"></span></li>
-        <li><span class="ico">📷</span><span data-t="home.how.s3"></span></li>
+        <li><span class="ico">🌊</span><span data-t="home.how.s0">Создай аквариум</span></li>
+        <li><span class="ico">📺</span><span data-t="home.how.s4">Открой на большом экране по коду</span></li>
+        <li><span class="ico">🖨️</span><span data-t="home.how.s1">Распечатай раскраску</span></li>
+        <li><span class="ico">🖍️</span><span data-t="home.how.s2">Раскрась фломастерами</span></li>
+        <li><span class="ico">📷</span><span data-t="home.how.s3">Сфотографируй телефоном</span></li>
       </ol>
       <!-- Витрина — карточка с живым кадром, а не таблетка: это главный путь
            новичка к «вау», и бледной кнопкой он терялся даже рядом с пустым «+». -->
       <a class="tank demo" id="demo" hidden>
         <div class="shot"><div class="veil"></div></div>
         <div class="body">
-          <h2 data-t="home.how.demo"></h2>
-          <div class="meta" data-t="home.how.demo.sub"></div>
+          <h2 data-t="home.how.demo">🐠 Посмотреть живой аквариум</h2>
+          <div class="meta" data-t="home.how.demo.sub">общая витрина — рыбки уже плавают</div>
         </div>
       </a>
     </div>
   </details>
 
-  <div class="empty" id="empty" data-t="home.empty" hidden></div>
+  <div class="empty" id="empty" data-t="home.empty" hidden>Пока ни одного аквариума. Создай первый — это займёт секунду.</div>
   <div class="tanks" id="tanks"></div>
 
+  <section class="about">
+    <h2 data-t="home.about.title">Что такое онлайн-аквариум</h2>
+    <p data-t="home.about.p1">Это живой аквариум в браузере, где плавают рыбки, нарисованные детьми. Распечатай раскраску, раскрась рыбку фломастерами или карандашами, сфотографируй телефоном — через несколько секунд она оживает и уплывает в аквариум на экране. Похоже на интерактивный аквариум teamLab, только дома: хватит телефона, принтера и телевизора или ноутбука.</p>
+    <p data-t-html="home.about.p2">Бесплатно, без регистрации и рекламы. Открой аквариум на большом экране по коду и запускай туда рыбок всей семьёй, в классе или на детском празднике. <a href="/print.html">Раскраски рыбок для печати</a> — здесь.</p>
+  </section>
+
   <footer>
-    <p style="margin:0 0 8px"><a href="/terms.html" data-t="home.terms"></a></p>
-    <p style="margin:0"><b style="color:var(--ink)" data-t="home.footer.important"></b><span data-t="home.footer.text"></span></p>
+    <p style="margin:0 0 8px"><a href="/terms.html" data-t="home.terms">Правила и данные ↗</a></p>
+    <p style="margin:0"><b style="color:var(--ink)" data-t="home.footer.important">Важно.</b><span data-t="home.footer.text"> Аккаунтов нет: по коду аквариум смотрят, по паролю управляют, оба хранит этот браузер. Подробности — в правилах.</span></p>
 
     <div class="author">
       <a class="who" href="https://github.com/MrMoT9I" target="_blank" rel="noopener" title="GitHub">
         <img src="/assets/author.webp" alt="" width="44" height="44">
-        <span><span data-t="home.author"></span><b>MrMoT9I ↗</b></span>
+        <span><span data-t="home.author">Автор проекта</span><b>MrMoT9I ↗</b></span>
       </a>
       <a class="soc" href="https://instagram.com/mrmot9i" target="_blank" rel="noopener">
         <img src="/assets/instagram.webp" alt="" width="28" height="28">
@@ -361,7 +414,7 @@
       </a>
       <a class="soc" href="https://t.me/+X9HNq8W2Sdc2YmFk" target="_blank" rel="noopener">
         <img src="/assets/telegram.webp" alt="" width="28" height="28">
-        <span><b data-t="home.author.chat"></b><i>@MrMoT9I_Chat</i></span>
+        <span><b data-t="home.author.chat">Чат проекта</b><i>@MrMoT9I_Chat</i></span>
       </a>
     </div>
   </footer>
@@ -379,9 +432,9 @@
   var empty = document.getElementById('empty');
 
   I18N.mount(document.getElementById('lang'));
-  document.title = I18N.t('home.title');
+  document.title = I18N.t('home.doctitle');
   // Смена языка перерисовывает карточки: в них счётчик рыбок и подписи.
-  addEventListener('aqua:lang', function () { document.title = I18N.t('home.title'); render(); });
+  addEventListener('aqua:lang', function () { document.title = I18N.t('home.doctitle'); render(); });
 
   // Карточка целиком — ссылка в аквариум. Отдельных кнопок нет: «Открыть»
   // дублировало нажатие на саму карточку, а управление живёт в меню
