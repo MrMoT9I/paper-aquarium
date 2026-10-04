@@ -417,20 +417,41 @@ function noteFail(ev) {
   }
 }
 
+// Промахи по адресу — отдельно от промахов по аквариуму: иначе перебор
+// с ротацией id аквариумов (или через ботнет из разных адресов, но на
+// один и тот же аквариум) не встретит вообще никакой задержки.
+const ipFails = new Map();
+
+function ipEventFor(req) {
+  const key = clientKey(req);
+  let ev = ipFails.get(key);
+  if (!ev) {
+    if (ipFails.size > 5000) ipFails.clear();
+    ev = { fails: 0, blockUntil: 0 };
+    ipFails.set(key, ev);
+  }
+  return ev;
+}
+
 // Пароль верный? Аквариумы, заведённые до паролей, остаются открытыми:
 // запереть их задним числом — значит отобрать доступ у хозяина, который
 // пароля никогда не видел. Админка предложит ему задать пароль сама.
-function checkPass(t, ev, given) {
+function checkPass(t, ev, given, ipEv) {
   const m = readMeta(t);
   if (!m.hash) return 'open';
-  if (blockedFor(ev)) return 'blocked';
-  if (given && samePass(hashPass(given, m.salt), m.hash)) { ev.fails = 0; ev.blockUntil = 0; return 'ok'; }
+  if (blockedFor(ev) || (ipEv && blockedFor(ipEv))) return 'blocked';
+  if (given && samePass(hashPass(given, m.salt), m.hash)) {
+    ev.fails = 0; ev.blockUntil = 0;
+    if (ipEv) { ipEv.fails = 0; ipEv.blockUntil = 0; }
+    return 'ok';
+  }
   noteFail(ev);
+  if (ipEv) noteFail(ipEv);
   return 'no';
 }
 
 function authed(req, t, ev) {
-  const r = checkPass(t, ev, req.headers['x-tank-pass']);
+  const r = checkPass(t, ev, req.headers['x-tank-pass'], ipEventFor(req));
   return r === 'open' || r === 'ok';
 }
 
