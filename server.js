@@ -58,6 +58,22 @@ const os = require('os');
 const ROOT = __dirname;
 const PORT = Number(process.env.PORT) || 8000;
 const MAX_BODY = 12 * 1024 * 1024;
+// Папка данных. По умолчанию — data рядом с сервером, как всегда; тесты
+// (test/) поднимают сервер на пустой временной папке.
+const DATA = path.resolve(process.env.AQUA_DATA_DIR || path.join(ROOT, 'data'));
+
+// Последняя страховка (аудит 16.10.2026): ошибка, которую никто не поймал,
+// пишется в журнал и не роняет процесс — с ним падали все аквариумы и все
+// телевизоры разом. До начала работы сбой — выход с кодом 1, как и было.
+let serving = false;
+process.on('uncaughtException', (e) => {
+  console.error('непойманная ошибка:', e);
+  if (!serving) process.exit(1);
+});
+process.on('unhandledRejection', (e) => {
+  console.error('непойманный отказ:', e);
+  if (!serving) process.exit(1);
+});
 
 // ── пределы ────────────────────────────────────────────────────────────────
 // Дома они не нужны: рыбок заводит ребёнок, а не бот. В интернете нужны:
@@ -75,13 +91,40 @@ const LIMITS = {
   bgBytes: 6 * 1024 * 1024,                                  // картинка фона
   dataMB: Number(process.env.AQUA_MAX_DATA_MB) || 2048       // вся папка data
 };
+// Снимок сцены для карточки на главной — JPEG в несколько десятков КБ.
+const PREVIEW_BYTES = 1024 * 1024;
 
-// Адрес клиента: за обратным прокси настоящий приходит в X-Forwarded-For,
-// напрямую — в сокете. Ключ нужен только для счётчика, точность не важна.
+// Адрес клиента — ключ для счётчиков. За Traefik настоящий адрес — ПОСЛЕДНИЙ
+// в X-Forwarded-For: его дописывает сам Traefik. Первый пишет клиент, и раньше
+// брался он — лимиты на новые аквариумы и на перебор пинов обходились одной
+// строкой в запросе (аудит 16.10.2026). Заголовку верим, только если запрос
+// пришёл из частной сети (Traefik в сети docker) или с этой машины.
+// IPv6 — по сети /64: адресов в ней у домашнего подключения бесконечно.
 function clientKey(req) {
-  const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-  return fwd || req.socket.remoteAddress || '?';
+  const peer = String(req.socket.remoteAddress || '?').replace(/^::ffff:/, '');
+  let ip = peer;
+  if (isPrivate(peer)) {
+    const list = String(req.headers['x-forwarded-for'] || '').split(',').map((x) => x.trim()).filter(Boolean);
+    if (list.length) ip = list[list.length - 1].replace(/^::ffff:/, '');
+  }
+  return ip.includes(':') ? net64(ip) : ip;
 }
+function isPrivate(ip) {
+  if (ip === '127.0.0.1' || ip === '::1') return true;
+  const [a, b] = ip.split('.').map(Number);
+  return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+}
+function net64(ip) {
+  const [head, tail] = ip.split('%')[0].split('::');
+  const a = head ? head.split(':') : [];
+  const b = tail ? tail.split(':') : [];
+  const full = ip.includes('::') ? [...a, ...Array(Math.max(0, 8 - a.length - b.length)).fill('0'), ...b] : a;
+  return full.slice(0, 4).map((x) => (x || '0').toLowerCase()).join(':') + '::/64';
+}
+// Адреса, за которыми много людей: прокладка us.<домен> пересылает TCP как
+// есть, и всех её посетителей сервер видит одним адресом. Им пределы шире.
+const SHARED = new Set(String(process.env.AQUA_SHARED_IPS || '').split(',').map((x) => x.trim()).filter(Boolean));
+const per = (n, key) => (SHARED.has(key) ? n * 20 : n);
 
 // Сколько занимает data. Обход папки когда-то был дешёвым, но растёт вместе
 // с ней: на десяти тысячах аквариумов это 41 000 папок и 147 000 файлов —
@@ -140,7 +183,7 @@ async function walkBytes(dir) {
 function rescanData() {
   if (scanAdded !== null) return;   // обход уже идёт
   scanAdded = 0;
-  walkBytes(path.join(ROOT, 'data')).then((total) => {
+  walkBytes(DATA).then((total) => {
     // Записи, случившиеся во время обхода, могли в него не попасть —
     // возвращаем их. Что-то посчитается дважды, но лишний байт безопаснее
     // недостающего.
@@ -152,10 +195,16 @@ function rescanData() {
 // Писать в data только через это, иначе счётчик разъедется. Перезапись
 // считается по разнице: preview.jpg переписывается каждые несколько секунд,
 // и от полного размера счётчик пух бы на пустом месте.
+//
+// Запись — через временный файл и переименование: preview.jpg перезаписывается
+// каждые несколько секунд, и раздача, попавшая в середину записи, читала
+// полфайла (а поток с ошибкой ронял процесс).
 function writeData(file, data) {
   let was = 0;
   try { was = fs.statSync(file).size; } catch (e) { /* файла ещё не было */ }
-  fs.writeFileSync(file, data);
+  const tmp = file + '.' + process.pid + '.' + Math.random().toString(36).slice(2, 8) + '.tmp';
+  fs.writeFileSync(tmp, data);
+  fs.renameSync(tmp, file);
   addDataBytes(Buffer.byteLength(data) - was);
 }
 
@@ -196,8 +245,68 @@ function tooHeavy(dataUrl, limit) {
   return Math.ceil(String(dataUrl).length * 0.75) > limit;
 }
 
-const TANKS = path.join(ROOT, 'data', 'tanks');
-const TANKS_TRASH = path.join(ROOT, 'data', 'trash-tanks');
+// Картинка из dataURL: настоящий тип по первым байтам и размер в точках из
+// заголовка, без декодирования. Раньше проверялся только префикс строки —
+// под «image/png» сохранялось что угодно, хоть HTML, а размер в точках не
+// проверялся вовсе: PNG в шесть мегабайт разворачивается в гигапиксели, и
+// падал каждый телевизор, открывший аквариум (аудит 16.10.2026).
+// → { buf, ext } или строка с причиной отказа.
+const MAX_SIDE = 4096;
+function imageFrom(dataUrl, types) {
+  const m = /^data:image\/(png|jpeg|webp);base64,/.exec(String(dataUrl || ''));
+  if (!m || !types.includes(m[1])) return 'картинка должна быть ' + types.join('/');
+  const buf = Buffer.from(String(dataUrl).slice(m[0].length), 'base64');
+  const kind = imageKind(buf);
+  if (kind !== m[1]) return 'это не картинка';
+  const wh = imageSize(buf, kind);
+  if (!wh || !wh[0] || !wh[1] || wh[0] > MAX_SIDE || wh[1] > MAX_SIDE) return 'странный размер картинки';
+  return { buf, ext: kind === 'jpeg' ? '.jpg' : '.' + kind };
+}
+function imageKind(buf) {
+  if (buf.length > 24 && buf[0] === 0x89 && buf.toString('latin1', 1, 4) === 'PNG') return 'png';
+  if (buf.length > 4 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpeg';
+  if (buf.length > 30 && buf.toString('latin1', 0, 4) === 'RIFF' && buf.toString('latin1', 8, 12) === 'WEBP') return 'webp';
+  return null;
+}
+function imageSize(buf, kind) {
+  if (kind === 'png') return [buf.readUInt32BE(16), buf.readUInt32BE(20)];
+  if (kind === 'webp') {
+    const chunk = buf.toString('latin1', 12, 16);
+    if (chunk === 'VP8 ' && buf.length >= 30) return [buf.readUInt16LE(26) & 0x3fff, buf.readUInt16LE(28) & 0x3fff];
+    if (chunk === 'VP8L' && buf.length >= 25) {
+      const b = buf.readUInt32LE(21);
+      return [(b & 0x3fff) + 1, ((b >>> 14) & 0x3fff) + 1];
+    }
+    if (chunk === 'VP8X' && buf.length >= 30) return [buf.readUIntLE(24, 3) + 1, buf.readUIntLE(27, 3) + 1];
+    return null;
+  }
+  // JPEG: по маркерам до кадра (SOF0…SOF15, кроме DHT/JPG/DAC).
+  let i = 2;
+  while (i + 9 < buf.length) {
+    if (buf[i] !== 0xff) return null;
+    const m = buf[i + 1];
+    if (m === 0xff) { i++; continue; }
+    if (m === 0xd8 || m === 0x01 || (m >= 0xd0 && m <= 0xd7)) { i += 2; continue; }
+    if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) {
+      return [buf.readUInt16BE(i + 7), buf.readUInt16BE(i + 5)];
+    }
+    if (m === 0xda || m === 0xd9) return null;
+    i += 2 + buf.readUInt16BE(i + 2);
+  }
+  return null;
+}
+
+// Имя для экрана и журнала: без переводов строк и управляющих символов (через
+// них подделывались строки журнала), без угловых скобок и без невидимых
+// символов, разворачивающих текст.
+function cleanName(v, max) {
+  return String(v || '')
+    .replace(/[\u0000-\u001f\u007f<>\u00ad\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, '')
+    .replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
+const TANKS = path.join(DATA, 'tanks');
+const TANKS_TRASH = path.join(DATA, 'trash-tanks');
 
 // Встроенные фоны общие для всех аквариумов и удалению не подлежат.
 // Загруженные лежат внутри своего аквариума.
@@ -297,7 +406,7 @@ function allowNewTank(key) {
   const hour = 60 * 60 * 1000;
   const now = Date.now();
   const fresh = (newTanks.get(key) || []).filter((t) => now - t < hour);
-  if (fresh.length >= LIMITS.tanksPerHour) { newTanks.set(key, fresh); return false; }
+  if (fresh.length >= per(LIMITS.tanksPerHour, key)) { newTanks.set(key, fresh); return false; }
   fresh.push(now);
   newTanks.set(key, fresh);
   if (newTanks.size > 5000) newTanks.clear();     // не растём без края
@@ -332,7 +441,7 @@ function allowNewPin(key) {
   const hour = 60 * 60 * 1000;
   const now = Date.now();
   const fresh = (newPins.get(key) || []).filter((t) => now - t < hour);
-  if (fresh.length >= PIN_PER_HOUR) { newPins.set(key, fresh); return false; }
+  if (fresh.length >= per(PIN_PER_HOUR, key)) { newPins.set(key, fresh); return false; }
   fresh.push(now);
   newPins.set(key, fresh);
   if (newPins.size > 5000) newPins.clear();
@@ -355,6 +464,20 @@ function makePin(id) {
     }
   }
   return null;
+}
+
+// Попыток ввести пин с адреса в час — всех, а не только промахов: промахи
+// гасятся паузой, а этот потолок — на случай, если пауза чем-то обходится.
+const PIN_TRIES_PER_HOUR = 60;
+const pinTries = new Map();
+function allowPinTry(key) {
+  const now = Date.now();
+  const fresh = (pinTries.get(key) || []).filter((t) => now - t < 3600e3);
+  if (fresh.length >= per(PIN_TRIES_PER_HOUR, key)) { pinTries.set(key, fresh); return false; }
+  fresh.push(now);
+  pinTries.set(key, fresh);
+  if (pinTries.size > 5000) pinTries.clear();
+  return true;
 }
 
 function pinMissFor(key) {
@@ -389,8 +512,11 @@ function makePass() {
   return String(crypto.randomInt(100000, 1000000));
 }
 
+// scrypt — асинхронный: синхронный занимал весь процесс на ~20 мс, и двести
+// проверок верного пароля задерживали любой другой запрос на три секунды
+// (аудит 16.10.2026). Асинхронный считается в пуле потоков.
 function hashPass(pass, salt) {
-  return crypto.scryptSync(String(pass), salt, 32).toString('hex');
+  return new Promise((ok, fail) => crypto.scrypt(String(pass), salt, 32, (e, key) => (e ? fail(e) : ok(key.toString('hex')))));
 }
 
 function samePass(a, b) {
@@ -399,47 +525,92 @@ function samePass(a, b) {
   return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
 }
 
-// Промахи считаем на аквариум, а не на адрес: адресов у желающего много,
-// аквариум — один. После пяти промахов пауза, дальше она удваивается.
+// Промахи считаются на пару «аквариум + адрес»: после пяти — пауза, дальше
+// она удваивается. Раньше счётчик был один на аквариум, и кто угодно со
+// ссылкой шестью неверными паролями запирал хозяина на всё большие паузы —
+// во время паузы не проходил и верный (аудит 16.10.2026). Против перебора с
+// множества адресов — общий потолок промахов на аквариум, 50 в час; но адрес,
+// с которого в этот аквариум уже входили верным паролем, им не упирается.
+// Удачная проверка помнится десять минут: страница управления шлёт пароль с
+// каждым действием, и scrypt на каждое незачем.
 const FAILS_FREE = 5;
 const BLOCK_BASE = 20 * 1000;
 const BLOCK_MAX = 10 * 60 * 1000;
+const TANK_MISS_PER_HOUR = 50;
+const passMiss = new Map();     // 'аквариум адрес' → { fails, blockUntil }
+const tankMiss = new Map();     // аквариум → времена промахов
+const trustedPass = new Map();  // 'аквариум адрес' → до какого времени свой
+const passCache = new Map();    // sha256(хеш + введённое) → до какого времени верно
 
 function blockedFor(ev) {
   return Math.max(0, ev.blockUntil - Date.now());
 }
 
-function noteFail(ev) {
+function noteFail(ev, free = FAILS_FREE) {
   ev.fails++;
-  if (ev.fails > FAILS_FREE) {
-    const n = ev.fails - FAILS_FREE - 1;
+  if (ev.fails > free) {
+    const n = ev.fails - free - 1;
     ev.blockUntil = Date.now() + Math.min(BLOCK_BASE * Math.pow(2, n), BLOCK_MAX);
   }
+}
+
+function missFor(map, key) {
+  let ev = map.get(key);
+  if (!ev) {
+    if (map.size > 20000) map.clear();
+    ev = { fails: 0, blockUntil: 0 };
+    map.set(key, ev);
+  }
+  return ev;
 }
 
 // Пароль верный? Аквариумы, заведённые до паролей, остаются открытыми:
 // запереть их задним числом — значит отобрать доступ у хозяина, который
 // пароля никогда не видел. Админка предложит ему задать пароль сама.
-function checkPass(t, ev, given) {
+// → { r: 'open' | 'ok' | 'no' | 'blocked', wait }
+async function checkPass(t, req, given) {
   const m = readMeta(t);
-  if (!m.hash) return 'open';
-  if (blockedFor(ev)) return 'blocked';
-  if (given && samePass(hashPass(given, m.salt), m.hash)) { ev.fails = 0; ev.blockUntil = 0; return 'ok'; }
-  noteFail(ev);
-  return 'no';
+  if (!m.hash) return { r: 'open' };
+  given = String(given || '');
+  const ck = crypto.createHash('sha256').update(m.hash + '\0' + given).digest('base64');
+  if ((passCache.get(ck) || 0) > Date.now()) return { r: 'ok' };
+  const ip = clientKey(req);
+  const pair = t.id + ' ' + ip;
+  const ev = missFor(passMiss, pair);
+  if (blockedFor(ev)) return { r: 'blocked', wait: blockedFor(ev) };
+  const now = Date.now();
+  const recent = (tankMiss.get(t.id) || []).filter((x) => now - x < 3600e3);
+  tankMiss.set(t.id, recent);
+  if (tankMiss.size > 20000) tankMiss.clear();
+  if ((trustedPass.get(pair) || 0) < now && recent.length >= TANK_MISS_PER_HOUR) {
+    return { r: 'blocked', wait: 3600e3 - (now - recent[0]) };
+  }
+  // Промах засчитываем ДО scrypt, а при успехе снимаем: scrypt теперь
+  // асинхронный, и одновременные запросы иначе проскакивали проверку все разом.
+  noteFail(ev, per(FAILS_FREE, ip));
+  const stamp = now + Math.random() / 1e3;
+  recent.push(stamp);
+  if (!given || !samePass(await hashPass(given, m.salt), m.hash)) return { r: 'no' };
+  ev.fails = 0; ev.blockUntil = 0;
+  const i = recent.indexOf(stamp);
+  if (i >= 0) recent.splice(i, 1);
+  if (passCache.size > 5000) passCache.clear();
+  passCache.set(ck, now + 600e3);
+  if (trustedPass.size > 20000) trustedPass.clear();
+  trustedPass.set(pair, now + 30 * 86400e3);
+  return { r: 'ok' };
 }
 
-function authed(req, t, ev) {
-  const r = checkPass(t, ev, req.headers['x-tank-pass']);
-  return r === 'open' || r === 'ok';
+async function authed(req, t) {
+  const c = await checkPass(t, req, req.headers['x-tank-pass']);
+  return c.r === 'open' || c.r === 'ok' ? null : c;
 }
 
 // Ответ на попытку изменить что-то без пароля. Пауза после серии промахов
 // отдаётся честно: клиенту есть что показать человеку.
-function denied(res, t, ev) {
-  const wait = blockedFor(ev);
-  if (wait) {
-    return send(res, 429, JSON.stringify({ error: 'слишком много попыток', retryAfter: Math.ceil(wait / 1000) }));
+function denied(res, c) {
+  if (c.r === 'blocked') {
+    return send(res, 429, JSON.stringify({ error: 'слишком много попыток', retryAfter: Math.ceil(c.wait / 1000) }));
   }
   send(res, 401, '{"error":"нужен пароль аквариума"}');
 }
@@ -465,6 +636,53 @@ const MIME = {
 function send(res, code, body, type) {
   res.writeHead(code, { 'Content-Type': type || 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
   res.end(body);
+}
+
+// Заголовки безопасности — на каждый ответ (аудит 16.10.2026: не было ни
+// одного). nosniff — браузер не угадывает тип: картинка остаётся картинкой.
+// SAMEORIGIN — страницы нельзя вставить в чужой сайт (кликджекинг удаления),
+// свои врезки (съёмка в аквариуме) работают. no-referrer — код аквариума в
+// адресе не уходит на внешние ссылки. Камера — только своим страницам.
+// HSTS — только за HTTPS (на проде; дома сервер работает по http).
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'SAMEORIGIN',
+  'Referrer-Policy': 'no-referrer',
+  'Permissions-Policy': 'camera=(self), microphone=(), geolocation=(), payment=(), usb=()',
+  ...(/^https:/.test(process.env.SITE_URL || 'https://aquarium.mrmot9i.com') && process.env.AQUA_HSTS !== '0'
+    ? { 'Strict-Transport-Security': 'max-age=31536000' } : {})
+};
+
+// Политика скриптов для страниц: свои файлы и ровно те встроенные скрипты,
+// что лежат в самой странице, — по хешу, посчитанному из файла (правишь
+// скрипт — политика меняется вместе с ним). Внедрённый в страницу чужой
+// скрипт браузер исполнять откажется. wasm-unsafe-eval и blob: для worker —
+// это декодер сжатых моделей (Draco): WebAssembly в рабочем потоке из blob.
+const cspCache = new Map();
+function cspFor(file) {
+  let st;
+  try { st = fs.statSync(file); } catch (e) { return null; }
+  const key = file + ':' + st.mtimeMs + ':' + st.size;
+  let v = cspCache.get(key);
+  if (!v) {
+    const body = fs.readFileSync(file, 'utf8');
+    const hashes = [];
+    const re = /<script(\s[^>]*)?>([\s\S]*?)<\/script>/gi;
+    let m;
+    while ((m = re.exec(body))) {
+      if (/\ssrc\s*=/i.test(m[1] || '')) continue;
+      // Браузер хеширует текст ПОСЛЕ разбора HTML, а разбор сводит CRLF к LF.
+      const text = m[2].replace(/\r\n?/g, '\n');
+      hashes.push("'sha256-" + crypto.createHash('sha256').update(text).digest('base64') + "'");
+    }
+    v = ["default-src 'self'", "script-src 'self' 'wasm-unsafe-eval' " + hashes.join(' '),
+         "worker-src 'self' blob:", "style-src 'self' 'unsafe-inline'", "img-src 'self' data: blob:",
+         "connect-src 'self' data: blob:", "media-src 'self' blob:", "object-src 'none'",
+         "base-uri 'none'", "frame-ancestors 'self'", "form-action 'self'"].join('; ');
+    if (cspCache.size > 50) cspCache.clear();
+    cspCache.set(key, v);
+  }
+  return v;
 }
 
 // Опросы отличаются от прочего API тем, что ответ почти всегда прежний. ETag
@@ -495,8 +713,16 @@ function readBody(req, res, onDone) {
   });
   req.on('end', () => {
     if (tooBig) return;
-    try { onDone(body ? JSON.parse(body) : {}); }
-    catch (e) { send(res, 400, JSON.stringify({ error: String(e.message || e) })); }
+    let data;
+    try { data = body ? JSON.parse(body) : {}; }
+    catch (e) { return send(res, 400, '{"error":"это не JSON"}'); }
+    // Только объект: «null» или массив доходили до обработчика и падали там.
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return send(res, 400, '{"error":"ждали объект JSON"}');
+    // Текст исключения наружу не отдаём (раньше уходил клиенту как есть).
+    Promise.resolve().then(() => onDone(data)).catch((e) => {
+      console.error('обработчик запроса:', e);
+      if (!res.headersSent) send(res, 500, '{"error":"что-то сломалось на сервере"}');
+    });
   });
 }
 
@@ -806,7 +1032,7 @@ setInterval(() => {
 }, SUB_PING_MS).unref();
 
 // ── API внутри аквариума ───────────────────────────────────────────────────
-function handleTankApi(req, res, t, url) {
+async function handleTankApi(req, res, t, url) {
   // Аквариум заводится только явно, через POST /api/tanks. Значит нет папки —
   // нет аквариума: либо код выдуман, либо аквариум удалили. Отвечать «пусто»
   // тут нельзя — главная по этому 404 вычищает призраков из своего списка,
@@ -834,16 +1060,17 @@ function handleTankApi(req, res, t, url) {
 
   // Снимок сцены для карточки на главной. Присылает сама сцена, когда
   // в аквариуме что-то изменилось.
+  // Без пароля по замыслу: снимок шлёт сама сцена, а она пароля не знает.
+  // Но только настоящий JPEG, не больше мегабайта и разумного размера.
   if (req.method === 'POST' && url === '/preview') {
     if (diskFull()) return send(res, 507, '{"error":"на сервере кончилось место"}');
     return readBody(req, res, (data) => {
-      const m = /^data:image\/jpeg;base64,/.exec(data.image || '');
-      if (!m) return send(res, 400, '{"error":"нужен image: dataURL jpeg"}');
-      const buf = Buffer.from(data.image.slice(m[0].length), 'base64');
-      if (!buf.length) return send(res, 400, '{"error":"пустой снимок"}');
+      if (tooHeavy(data.image, PREVIEW_BYTES)) return send(res, 413, '{"error":"снимок слишком тяжёлый"}');
+      const img = imageFrom(data.image, ['jpeg']);
+      if (typeof img === 'string') return send(res, 400, JSON.stringify({ error: img }));
       ensureTank(t);
-      writeData(t.preview, buf);
-      send(res, 200, JSON.stringify({ ok: true, bytes: buf.length }));
+      writeData(t.preview, img.buf);
+      send(res, 200, JSON.stringify({ ok: true, bytes: img.buf.length }));
     });
   }
 
@@ -851,23 +1078,24 @@ function handleTankApi(req, res, t, url) {
   // пароль один раз на входе, а не выясняла его правильность на первой же
   // попытке что-нибудь удалить.
   if (req.method === 'POST' && url === '/auth') {
-    return readBody(req, res, (data) => {
-      const r = checkPass(t, ev, data.password);
-      if (r !== 'ok' && r !== 'open') return denied(res, t, ev);
-      send(res, 200, JSON.stringify({ ok: true, locked: r === 'ok' }));
+    return readBody(req, res, async (data) => {
+      const c = await checkPass(t, req, data.password);
+      if (c.r !== 'ok' && c.r !== 'open') return denied(res, c);
+      send(res, 200, JSON.stringify({ ok: true, locked: c.r === 'ok' }));
     });
   }
 
   // Смена пароля — и способ завести его аквариуму, оставшемуся с тех пор,
   // когда паролей не было: там authed() пропускает всех.
   if (req.method === 'POST' && url === '/password') {
-    if (!authed(req, t, ev)) return denied(res, t, ev);
-    return readBody(req, res, (data) => {
+    const no = await authed(req, t);
+    if (no) return denied(res, no);
+    return readBody(req, res, async (data) => {
       const pass = String(data.password || '').trim();
-      if (pass.length < 4) return send(res, 400, '{"error":"пароль от 4 знаков"}');
+      if (pass.length < 4 || pass.length > 100) return send(res, 400, '{"error":"пароль от 4 до 100 знаков"}');
       const meta = readMeta(t);
       meta.salt = crypto.randomBytes(16).toString('hex');
-      meta.hash = hashPass(pass, meta.salt);
+      meta.hash = await hashPass(pass, meta.salt);
       ensureTank(t);
       writeData(t.meta, JSON.stringify(meta));
       console.log(`пароль аквариума ${t.id} изменён`);
@@ -876,10 +1104,11 @@ function handleTankApi(req, res, t, url) {
   }
 
   if (req.method === 'PATCH' && url === '/meta') {
-    if (!authed(req, t, ev)) return denied(res, t, ev);
+    const no = await authed(req, t);
+    if (no) return denied(res, no);
     return readBody(req, res, (data) => {
       const meta = readMeta(t);
-      meta.name = String(data.name || '').trim().slice(0, 60) || meta.name;
+      meta.name = cleanName(data.name, 60) || meta.name;
       ensureTank(t);
       writeData(t.meta, JSON.stringify(meta));
       send(res, 200, JSON.stringify(publicMeta(meta)));
@@ -888,7 +1117,8 @@ function handleTankApi(req, res, t, url) {
 
   // Удаление аквариума — тоже перенос, а не стирание: внутри детские рисунки.
   if (req.method === 'DELETE' && url === '/') {
-    if (!authed(req, t, ev)) return denied(res, t, ev);
+    const no = await authed(req, t);
+    if (no) return denied(res, no);
     if (fs.existsSync(t.dir)) {
       fs.mkdirSync(TANKS_TRASH, { recursive: true });
       fs.renameSync(t.dir, path.join(TANKS_TRASH, t.id + '-' + Date.now()));
@@ -942,19 +1172,26 @@ function handleTankApi(req, res, t, url) {
         return send(res, 200, JSON.stringify({ ok: true, id: fid }));
       }
 
-      if (!data.kind || !/^data:image\/(png|jpeg);base64,/.test(data.texture || '')) {
-        return send(res, 400, '{"error":"нужны kind и texture (dataURL png/jpeg)"}');
+      // Вид — только из раскрасок: строка без предела в 11 МБ уходила каждому
+      // зрителю аквариума в списке рыбок и роняла телевизоры, а в журнал —
+      // целиком (аудит 16.10.2026).
+      const kind = String(data.kind || '');
+      const kinds = sheetKinds();
+      if (!/^[a-z0-9-]{1,40}$/.test(kind) || (kinds.size && !kinds.has(kind))) {
+        return send(res, 400, '{"error":"нет такой рыбки в раскрасках"}');
       }
       if (tooHeavy(data.texture, LIMITS.fishBytes)) {
         return send(res, 413, '{"error":"картинка рыбки слишком тяжёлая"}');
       }
+      const img = imageFrom(data.texture, ['png', 'jpeg']);
+      if (typeof img === 'string') return send(res, 400, JSON.stringify({ error: img }));
       ensureTank(t);
-      const png = Buffer.from(data.texture.split(',')[1], 'base64');
+      const png = img.buf;
       writeData(path.join(t.fish, fid + '.png'), png);
       writeData(path.join(t.fish, fid + '.json'), JSON.stringify({
-        id: fid, kind: String(data.kind), created: new Date().toISOString()
+        id: fid, kind, created: new Date().toISOString()
       }));
-      console.log(`+ рыбка ${data.kind} в ${t.id} (${Math.round(png.length / 1024)} КБ) — всего ${listFish(t).length}`);
+      console.log(`+ рыбка ${kind} в ${t.id} (${Math.round(png.length / 1024)} КБ) — всего ${listFish(t).length}`);
       notify(t);
       send(res, 200, JSON.stringify({ ok: true, id: fid }));
     });
@@ -962,14 +1199,16 @@ function handleTankApi(req, res, t, url) {
 
   const delMatch = url.match(/^\/fish\/([a-z0-9-]+)$/);
   if (req.method === 'DELETE' && delMatch) {
-    if (!authed(req, t, ev)) return denied(res, t, ev);
+    const no = await authed(req, t);
+    if (no) return denied(res, no);
     const n = trashFish(t, delMatch[1]);
     if (n) { console.log(`- рыбка ${delMatch[1]} из ${t.id} → в корзину`); notify(t); }
     return send(res, n ? 200 : 404, JSON.stringify({ ok: !!n }));
   }
 
   if (req.method === 'DELETE' && url === '/fish') {
-    if (!authed(req, t, ev)) return denied(res, t, ev);
+    const no = await authed(req, t);
+    if (no) return denied(res, no);
     const list = listFish(t);
     list.forEach((f) => trashFish(t, f.id));
     console.log(`аквариум ${t.id} очищен, ${list.length} рыбок → в корзину`);
@@ -989,15 +1228,14 @@ function handleTankApi(req, res, t, url) {
     }
     if (diskFull()) return send(res, 507, '{"error":"на сервере кончилось место"}');
     return readBody(req, res, (data) => {
-      const m = /^data:image\/(png|jpeg|webp);base64,/.exec(data.image || '');
-      if (!m) return send(res, 400, '{"error":"нужен image: dataURL png/jpeg/webp"}');
       if (tooHeavy(data.image, LIMITS.bgBytes)) {
         return send(res, 413, '{"error":"фон слишком тяжёлый"}');
       }
-      const buf = Buffer.from(data.image.slice(m[0].length), 'base64');
-      if (!buf.length) return send(res, 400, '{"error":"пустая картинка"}');
+      const img = imageFrom(data.image, ['png', 'jpeg', 'webp']);
+      if (typeof img === 'string') return send(res, 400, JSON.stringify({ error: img }));
+      const buf = img.buf;
       ensureTank(t);
-      const ext = m[1] === 'jpeg' ? '.jpg' : '.' + m[1];
+      const ext = img.ext;
       const name = UPLOAD_PREFIX + Date.now().toString(36) + '-' +
                    Math.random().toString(36).slice(2, 6) + ext;
       writeData(path.join(t.backgrounds, name), buf);
@@ -1016,12 +1254,16 @@ function handleTankApi(req, res, t, url) {
     }
     const file = path.join(t.backgrounds, name);
     if (!fs.existsSync(file)) return send(res, 404, '{"error":"not found"}');
-    removeData(file);
+    // Без пароля по замыслу (фон меняет любой со ссылкой), но не насовсем —
+    // в корзину аквариума: свой фон бывает детским рисунком или фото, а
+    // удаление было мимо корзины, безвозвратно (аудит 16.10.2026).
+    fs.mkdirSync(t.trash, { recursive: true });
+    fs.renameSync(file, path.join(t.trash, name));
     // Если удалили фон, который сейчас стоит в сцене, — выдаём случайный,
     // иначе аквариум остался бы с битой ссылкой до следующей смены настроек.
     const s = readSettings(t);
     if (s.background === name) { writeSettings(t, { background: randomBackground() }); notify(t); }
-    console.log(`- фон ${name} из ${t.id} удалён`);
+    console.log(`- фон ${name} из ${t.id} → в корзину`);
     return send(res, 200, '{"ok":true}');
   }
 
@@ -1067,7 +1309,7 @@ function handleTankApi(req, res, t, url) {
   send(res, 404, '{"error":"unknown api"}');
 }
 
-function handleApi(req, res, url) {
+async function handleApi(req, res, url) {
   // Пак один на все аквариумы, поэтому ручка общая.
   if (req.method === 'GET' && url === '/api/pack') {
     return send(res, 200, JSON.stringify(listPack()));
@@ -1078,16 +1320,19 @@ function handleApi(req, res, url) {
   // бы за вечер. Пауза по адресу: аквариум по пину ещё неизвестен.
   const pm = url.match(/^\/api\/pin\/(\d{5})$/);
   if (req.method === 'GET' && pm) {
-    const ev = pinMissFor(clientKey(req));
+    const key = clientKey(req);
+    const ev = pinMissFor(key);
     const wait = blockedFor(ev);
     if (wait) {
       return send(res, 429, JSON.stringify({ error: 'слишком много попыток', retryAfter: Math.ceil(wait / 1000) }));
     }
+    if (!allowPinTry(key)) return send(res, 429, '{"error":"слишком много попыток","retryAfter":600}');
     sweepPins();
     const hit = pins.get(pm[1]);
-    if (!hit) { noteFail(ev); return send(res, 404, '{"error":"нет такого кода"}'); }
-    ev.fails = 0;
-    ev.blockUntil = 0;
+    if (!hit) { noteFail(ev, per(FAILS_FREE, key)); return send(res, 404, '{"error":"нет такого кода"}'); }
+    // Верный пин счётчик промахов НЕ обнуляет: раньше обнулял, и перебор шёл
+    // без пауз — пять промахов, свой же пин, ещё пять (аудит 16.10.2026).
+    // Промахи гаснут только со временем.
     return send(res, 200, JSON.stringify({ id: hit.id }));
   }
 
@@ -1108,21 +1353,22 @@ function handleApi(req, res, url) {
     if (!allowNewTank(clientKey(req))) {
       return send(res, 429, '{"error":"слишком часто; попробуй через час"}');
     }
-    return readBody(req, res, (data) => {
+    return readBody(req, res, async (data) => {
+      // Пароль либо свой (от 4 знаков — как при смене), либо придуманный
+      // сервером: аквариум без пароля не заводим — потом его никто не
+      // поставит, а рыбок удалит любой, кому переслали ссылку.
+      const pass = String(data.password || '').trim() || makePass();
+      if (pass.length < 4 || pass.length > 100) return send(res, 400, '{"error":"пароль от 4 до 100 знаков"}');
       const id = newTankId();
       const t = tank(id);
       ensureTank(t);
-      // Пароль либо свой, либо придуманный сервером: аквариум без пароля
-      // не заводим — потом его никто не поставит, а рыбок удалит любой,
-      // кому переслали ссылку.
-      const pass = String(data.password || '').trim() || makePass();
       const salt = crypto.randomBytes(16).toString('hex');
       const meta = {
         id,
-        name: String(data.name || '').trim().slice(0, 60) || 'Мой аквариум',
+        name: cleanName(data.name, 60) || 'Мой аквариум',
         created: new Date().toISOString(),
         salt,
-        hash: hashPass(pass, salt)
+        hash: await hashPass(pass, salt)
       };
       writeData(t.meta, JSON.stringify(meta));
       // Новый аквариум сразу с картинкой: какая достанется — дело случая.
@@ -1159,13 +1405,23 @@ function pageFor(url) {
 // Раздаём перечисленное, а не всё, что лежит рядом с сервером. Иначе по сети
 // уезжает и .git, и детские рисунки из data/, и купленный пак моделей —
 // папка с ним лежит в том же каталоге проекта.
-const STATIC_DIRS = ['/assets/', '/vendor/', '/demos/', '/tools/'];
+// /tools/ — страницы для разработки (силуэты, проверка съёмки): только с
+// этой же машины, наружу им не место (были открыты на проде).
+const STATIC_DIRS = ['/assets/', '/vendor/', '/demos/'];
 const STATIC_FILES = ['/print.html', '/terms.html', '/favicon.ico'];
 // Из data наружу смотрят только две вещи: свои фоны и снимок сцены.
 // Текстуры рыбок отдаёт API, всё остальное — не для сети.
 const DATA_FILE_RE = /^\/data\/tanks\/([^/]+)\/(?:preview\.jpg|backgrounds\/[\w.-]+)$/;
 
-function staticFor(url) {
+function staticFor(url, req) {
+  // Обратный слеш в адресе: на Linux это обычный символ имени, а на Windows —
+  // разделитель папок, и «/assets/..%5cdata%5c…» читал meta.json с хешем
+  // пароля мимо нормализации ниже (аудит 16.10.2026). Таких файлов у нас нет.
+  if (url.includes('\\')) return null;
+  if (url.startsWith('/tools/') && req && isLocal(req)) {
+    const f = path.normalize(path.join(ROOT, url));
+    return path.posix.normalize(url) === url && f.startsWith(path.join(ROOT, 'tools') + path.sep) ? f : null;
+  }
   // Нормализуем адрес ДО проверки списка. Иначе «/assets/../server.js»
   // проходит по началу строки как разрешённый, а «..» схлопывается уже
   // после — и наружу уезжает любой файл рядом с сервером: .env с секретами,
@@ -1182,10 +1438,18 @@ function staticFor(url) {
     : STATIC_FILES.includes(clean) || STATIC_DIRS.some((dir) => clean.startsWith(dir));
   if (!allowed) return null;
 
-  const file = path.normalize(path.join(ROOT, clean));
+  // Файлы аквариумов лежат в DATA (по умолчанию это и есть ROOT/data).
+  const base = data ? DATA : ROOT;
+  const file = path.normalize(path.join(base, data ? clean.slice('/data'.length) : clean));
   // Сравниваем с разделителем на конце: без него мимо проверки проходит
   // соседняя папка, имя которой начинается так же («…/009 aqua-backup»).
-  return file.startsWith(ROOT + path.sep) ? file : null;
+  return file.startsWith(base + path.sep) ? file : null;
+}
+
+// Запрос с этой же машины, не через прокси.
+function isLocal(req) {
+  const peer = String(req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+  return (peer === '127.0.0.1' || peer === '::1') && !req.headers['x-forwarded-for'];
 }
 
 // ── для поисковиков ────────────────────────────────────────────────────────
@@ -1274,7 +1538,17 @@ function coloringPdf(req) {
   return 'en';
 }
 
-http.createServer((req, res) => {
+const server = http.createServer((req, res) => {
+  for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
+  // Любая ошибка в обработке — ответ 500 этому запросу, а не падение сервера.
+  Promise.resolve().then(() => handle(req, res)).catch((e) => {
+    console.error('запрос ' + req.method + ' ' + String(req.url).slice(0, 200) + ':', e);
+    if (!res.headersSent) send(res, 500, '{"error":"что-то сломалось на сервере"}');
+    else res.destroy();
+  });
+});
+
+async function handle(req, res) {
   // битый %-escape от сканеров (`/%`, `/%E0%A4%A`) ронял весь процесс
   let url;
   try { url = decodeURIComponent(req.url.split('?')[0]); }
@@ -1298,7 +1572,7 @@ http.createServer((req, res) => {
   }
 
   const page = pageFor(url);
-  let file = page ? path.join(ROOT, page) : staticFor(url);
+  let file = page ? path.join(ROOT, page) : staticFor(url, req);
 
   if (!file) return send(res, 404, 'not found', 'text/plain');
   if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
@@ -1329,9 +1603,28 @@ http.createServer((req, res) => {
   }
 
   headers['Content-Type'] = MIME[ext] || 'application/octet-stream';
-  res.writeHead(200, headers);
-  fs.createReadStream(file).pipe(res);
-}).listen(PORT, '0.0.0.0', () => {
+  if (ext === '.html') {
+    const csp = cspFor(file);
+    if (csp) headers['Content-Security-Policy'] = csp;
+  }
+  // Поток — с обработчиком ошибки: файл мог исчезнуть между проверкой и
+  // открытием (удалённый фон, перезаписанный снимок), и необработанная
+  // ошибка потока роняла процесс (аудит 16.10.2026).
+  const stream = fs.createReadStream(file);
+  stream.on('error', () => {
+    if (!res.headersSent) send(res, 404, 'not found', 'text/plain');
+    else res.destroy();
+  });
+  stream.once('open', () => { res.writeHead(200, headers); stream.pipe(res); });
+}
+
+// Таймауты: заголовки — не дольше 20 с, запрос целиком — 2 минуты (фон в
+// шесть мегабайт с телефона на плохой сети). У Node по умолчанию 5 минут.
+server.headersTimeout = 20e3;
+server.requestTimeout = 120e3;
+
+server.listen(PORT, '0.0.0.0', () => {
+  serving = true;
   console.log(`Аквариумы: http://localhost:${PORT}/`);
   const nets = os.networkInterfaces();
   for (const name of Object.keys(nets)) {

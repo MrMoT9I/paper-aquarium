@@ -80,7 +80,7 @@
   <h1 data-t="print.title"></h1>
   <a href="/" class="home" data-t="print.home"></a>
   <a class="pdf" id="pdfLink" download data-t="print.pdf"></a>
-  <button onclick="document.body.classList.remove('one'); print()" data-t="print.all"></button>
+  <button id="printAll" data-t="print.all"></button>
 </div>
 <div class="wrap">
   <p class="note" data-t="print.note"></p>
@@ -91,6 +91,13 @@
 <script src="/assets/i18n.js"></script>
 <script>
 var Q = new URLSearchParams(location.search);
+
+// Обработчик — здесь, а не атрибутом onclick: политика скриптов страницы
+// (Content-Security-Policy) пускает только этот скрипт по его хешу.
+document.getElementById('printAll').addEventListener('click', function () {
+  document.body.classList.remove('one');
+  print();
+});
 
 // Врезка в меню аквариума: своя подложка не нужна, а высоту надо сообщать
 // наружу — карточка меню сама её не угадает.

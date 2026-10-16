@@ -8,6 +8,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "test": "node --test test/security.test.mjs",
     "coloring": "node tools/make-coloring.js",
     "pdf": "node tools/make-pdf.js"
   },
