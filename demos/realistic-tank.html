@@ -332,7 +332,7 @@
 <script src="/assets/i18n.js"></script>
 <script src="/vendor/qr.js"></script>
 <script src="/assets/fish-frame.js"></script>
-<script src="/assets/fish-thumbs.js"></script>
+<script src="/assets/fish-thumbs.js?v=paint2"></script>
 <script src="/assets/modal.js"></script>
 <script src="/assets/tank.js"></script>
 <script>
@@ -756,11 +756,19 @@
         // чтобы customProgramCacheKey увидел vertexColors.
         if (o.geometry && o.geometry.getAttribute && o.geometry.getAttribute('color')) {
           mat.vertexColors = true;
-          // тонкая подушка: двусторонний, чтобы шов контура не «дырявил»
+        }
+        // тонкая подушка (китв/конёк): двусторонний материал + чуть ярче текстура
+        if (!mat.map || (o.geometry && o.geometry.getAttribute && o.geometry.getAttribute('color'))) {
           mat.side = THREE.DoubleSide;
         }
+        if (mat.map) {
+          mat.side = THREE.DoubleSide;
+          mat.map.encoding = THREE.sRGBEncoding;
+          mat.map.needsUpdate = true;
+          mat.envMapIntensity = 0.7;
+        }
         o.material = addCaustics(mat, 0.5);
-        o.material.envMapIntensity = 0.85;
+        if (!mat.map) o.material.envMapIntensity = 0.85;
         o.material.needsUpdate = true;
       }
       // Тело гнём сами, если его не гнёт клип: либо скелета нет вовсе, либо
@@ -1321,7 +1329,7 @@
   // рыбок не подселяем: иначе первый список отбросит их все как «нет шаблона».
   // Поэтому и поток событий, и опросы стартуют только отсюда.
   function initPainted() {
-    fetch('/assets/coloring/manifest.json?v=sea13')
+    fetch('/assets/coloring/manifest.json?v=sea17')
       .then(function (r) { return r.json(); })
       .then(function (m) {
         m.fish.forEach(function (f) { paintedSpec[f.name] = { length: f.length }; });
@@ -1870,7 +1878,7 @@
   function listPack() {
     if (packListed) return;
     packListed = true;
-    fetch('/assets/coloring/manifest.json?v=sea13')
+    fetch('/assets/coloring/manifest.json?v=sea17')
       .then(function (r) { return r.json(); })
       .then(function (m) {
         (m.fish || []).forEach(function (f) { sheetTitles[f.name] = f.titles || { ru: f.title }; });

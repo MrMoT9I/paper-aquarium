@@ -14,7 +14,7 @@
   {
     "name": "whale",
     "title": "Горбатый кит",
-    "url": "/assets/models/pack/whale/whale.glb?v=sealed1",
+    "url": "/assets/models/pack/whale/whale.glb?v=paint1",
     "frame": {
       "body": "z",
       "up": "y",
@@ -26,7 +26,7 @@
   {
     "name": "seahorse",
     "title": "Морской конёк",
-    "url": "/assets/models/pack/seahorse/seahorse.glb?v=alive2",
+    "url": "/assets/models/pack/seahorse/seahorse.glb?v=tex3",
     "frame": {
       "body": "z",
       "up": "y",
@@ -34,6 +34,30 @@
       "headAtMax": true
     },
     "length": 1.8
+  },
+  {
+    "name": "catfish",
+    "title": "Сом",
+    "url": "/assets/models/pack/catfish/catfish.glb?v=glb1",
+    "frame": {
+      "body": "z",
+      "up": "y",
+      "lat": "x",
+      "headAtMax": true
+    },
+    "length": 4.5
+  },
+  {
+    "name": "sawfish",
+    "title": "Рыба-пила",
+    "url": "/assets/models/pack/sawfish/sawfish.glb?v=nat1",
+    "frame": {
+      "body": "z",
+      "up": "y",
+      "lat": "x",
+      "headAtMax": true
+    },
+    "length": 5.2
   },
   {
     "name": "clownfish",
