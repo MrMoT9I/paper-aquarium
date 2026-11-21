@@ -52,18 +52,16 @@
         var a = o.geometry.getAttribute('color');
         if (!a || a._paSrgbLinearized) return;
         var out = new Float32Array(a.count * 4);
-        var raw = a.array || (a.data && a.data.array);
-        var denom = a.normalized && raw instanceof Uint8Array ? 255 :
-          (a.normalized && raw instanceof Uint16Array ? 65535 : 1);
+        // getX/getY/getZ already return 0..1 for normalized COLOR_0 — do not divide by 255 again
         function linear(c) {
-          c = Math.max(0, Math.min(1, c / denom));
+          c = Math.max(0, Math.min(1, c));
           return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
         }
         for (var i = 0; i < a.count; i++) {
           out[i * 4] = linear(a.getX(i));
           out[i * 4 + 1] = linear(a.getY(i));
           out[i * 4 + 2] = linear(a.getZ(i));
-          out[i * 4 + 3] = a.itemSize > 3 ? Math.max(0, Math.min(1, a.getW(i) / denom)) : 1;
+          out[i * 4 + 3] = a.itemSize > 3 ? Math.max(0, Math.min(1, a.getW(i))) : 1;
         }
         var converted = new THREE.Float32BufferAttribute(out, 4);
         converted._paSrgbLinearized = true;
@@ -99,14 +97,18 @@
           o.frustumCulled = false;
           // paper-aquarium: color-only
           if (o.geometry && o.geometry.getAttribute && o.geometry.getAttribute('color') && !o.geometry.getAttribute('normal') && o.geometry.computeVertexNormals) o.geometry.computeVertexNormals();
+          var hasVC = o.geometry && o.geometry.getAttribute && o.geometry.getAttribute('color');
           var mats = Array.isArray(o.material) ? o.material : [o.material];
-          mats.forEach(function (m) {
-            if (!m) return;
-            if (o.geometry && o.geometry.getAttribute && o.geometry.getAttribute('color')) {
+          var outMats = mats.map(function (m) {
+            if (!m) return m;
+            if (hasVC && !m.map && THREE.MeshBasicMaterial) {
+              // paper-aquarium: vc-basic — readable colors in picker thumbs
+              return new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, color: 0xffffff });
+            }
+            if (hasVC) {
               m.vertexColors = true;
               if (m.color && m.color.setHex) m.color.setHex(0xffffff);
             }
-            // Текстурные pillow (кит/конёк/сом): без sRGB карта выглядит серой.
             if (m.map) {
               if ('colorSpace' in m.map) m.map.colorSpace = THREE.SRGBColorSpace;
               else m.map.encoding = THREE.sRGBEncoding;
@@ -114,7 +116,9 @@
             }
             m.side = THREE.DoubleSide;
             m.needsUpdate = true;
+            return m;
           });
+          o.material = Array.isArray(o.material) ? outMats : outMats[0];
         });
 
         // Ориентацию: сначала frame из pack.json (как в аквариуме), иначе

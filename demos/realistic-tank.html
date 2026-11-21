@@ -1216,18 +1216,16 @@
       var a = o.geometry.getAttribute('color');
       if (!a || a._paSrgbLinearized) return;
       var out = new Float32Array(a.count * 4);
-      var raw = a.array || (a.data && a.data.array);
-      var denom = a.normalized && raw instanceof Uint8Array ? 255 :
-        (a.normalized && raw instanceof Uint16Array ? 65535 : 1);
+      // getX/getY/getZ already return 0..1 for normalized COLOR_0 — do not divide by 255 again
       function linear(c) {
-        c = Math.max(0, Math.min(1, c / denom));
+        c = Math.max(0, Math.min(1, c));
         return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
       }
       for (var i = 0; i < a.count; i++) {
         out[i * 4] = linear(a.getX(i));
         out[i * 4 + 1] = linear(a.getY(i));
         out[i * 4 + 2] = linear(a.getZ(i));
-        out[i * 4 + 3] = a.itemSize > 3 ? Math.max(0, Math.min(1, a.getW(i) / denom)) : 1;
+        out[i * 4 + 3] = a.itemSize > 3 ? Math.max(0, Math.min(1, a.getW(i))) : 1;
       }
       var converted = new THREE.Float32BufferAttribute(out, 4);
       converted._paSrgbLinearized = true;
