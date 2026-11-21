@@ -4062,11 +4062,11 @@
     {
       "id": 6,
       "name": "ray",
-      "title": "Манта",
+      "title": "Скат",
       "titles": {
-        "ru": "Манта",
-        "en": "Manta ray",
-        "uk": "Манта"
+        "ru": "Скат",
+        "en": "Ray",
+        "uk": "Скат"
       },
       "model": "/assets/models/pack/ray/ray.glb",
       "svg": "assets/coloring/ray.svg",

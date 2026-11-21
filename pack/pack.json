@@ -38,7 +38,7 @@
   {
     "name": "catfish",
     "title": "Сом",
-    "url": "/assets/models/pack/catfish/catfish.glb?v=glb1",
+    "url": "/assets/models/pack/catfish/catfish.glb?v=bright2",
     "frame": {
       "body": "z",
       "up": "y",
@@ -50,7 +50,7 @@
   {
     "name": "sawfish",
     "title": "Рыба-пила",
-    "url": "/assets/models/pack/sawfish/sawfish.glb?v=nat2",
+    "url": "/assets/models/pack/sawfish/sawfish.glb?v=bright2",
     "frame": {
       "body": "z",
       "up": "y",
@@ -61,8 +61,8 @@
   },
   {
     "name": "ray",
-    "title": "Манта",
-    "url": "/assets/models/pack/ray/ray.glb?v=nat2",
+    "title": "Скат",
+    "url": "/assets/models/pack/ray/ray.glb?v=bright2",
     "frame": {
       "body": "z",
       "up": "y",
@@ -75,7 +75,7 @@
   {
     "name": "clownfish",
     "title": "Рыба-клоун",
-    "url": "/assets/models/pack/clownfish/clownfish.glb?v=nat2",
+    "url": "/assets/models/pack/clownfish/clownfish.glb?v=bright2",
     "frame": {
       "body": "z",
       "up": "y",
@@ -87,7 +87,7 @@
   {
     "name": "bluetang",
     "title": "Голубой хирург",
-    "url": "/assets/models/pack/bluetang/bluetang.glb?v=nat2",
+    "url": "/assets/models/pack/bluetang/bluetang.glb?v=bright2",
     "frame": {
       "body": "z",
       "up": "y",
@@ -99,7 +99,7 @@
   {
     "name": "chelmonrostratus",
     "title": "Рыба-пинцет",
-    "url": "/assets/models/pack/chelmonrostratus/chelmonrostratus.glb?v=nat2",
+    "url": "/assets/models/pack/chelmonrostratus/chelmonrostratus.glb?v=bright2",
     "frame": {
       "body": "z",
       "up": "y",
@@ -111,7 +111,7 @@
   {
     "name": "clowntriggerfish",
     "title": "Спинорог",
-    "url": "/assets/models/pack/clowntriggerfish/clowntriggerfish.glb?v=nat2",
+    "url": "/assets/models/pack/clowntriggerfish/clowntriggerfish.glb?v=bright2",
     "frame": {
       "body": "z",
       "up": "y",
@@ -123,7 +123,7 @@
   {
     "name": "frenchangelfish",
     "title": "Французский ангел",
-    "url": "/assets/models/pack/frenchangelfish/frenchangelfish.glb?v=nat2",
+    "url": "/assets/models/pack/frenchangelfish/frenchangelfish.glb?v=bright2",
     "frame": {
       "body": "z",
       "up": "y",
@@ -135,7 +135,7 @@
   {
     "name": "fusilierfish",
     "title": "Цезио",
-    "url": "/assets/models/pack/fusilierfish/fusilierfish.glb?v=nat2",
+    "url": "/assets/models/pack/fusilierfish/fusilierfish.glb?v=bright2",
     "frame": {
       "body": "z",
       "up": "y",
@@ -147,7 +147,7 @@
   {
     "name": "blackspottedsweetlips",
     "title": "Ворчун",
-    "url": "/assets/models/pack/blackspottedsweetlips/blackspottedsweetlips.glb?v=nat2",
+    "url": "/assets/models/pack/blackspottedsweetlips/blackspottedsweetlips.glb?v=bright2",
     "frame": {
       "body": "z",
       "up": "y",
@@ -159,7 +159,7 @@
   {
     "name": "coralgrouper",
     "title": "Групер",
-    "url": "/assets/models/pack/coralgrouper/coralgrouper.glb?v=nat2",
+    "url": "/assets/models/pack/coralgrouper/coralgrouper.glb?v=bright2",
     "frame": {
       "body": "z",
       "up": "y",
@@ -171,7 +171,7 @@
   {
     "name": "browntang",
     "title": "Бурый хирург",
-    "url": "/assets/models/pack/browntang/browntang.glb?v=nat2",
+    "url": "/assets/models/pack/browntang/browntang.glb?v=bright2",
     "frame": {
       "body": "z",
       "up": "y",
@@ -183,7 +183,7 @@
   {
     "name": "bicolorangelfish",
     "title": "Двухцветный ангел",
-    "url": "/assets/models/pack/bicolorangelfish/bicolorangelfish.glb?v=nat2",
+    "url": "/assets/models/pack/bicolorangelfish/bicolorangelfish.glb?v=bright2",
     "frame": {
       "body": "z",
       "up": "y",
@@ -195,7 +195,7 @@
   {
     "name": "bluecheekbutterflyfish",
     "title": "Рыба-бабочка",
-    "url": "/assets/models/pack/bluecheekbutterflyfish/bluecheekbutterflyfish.glb?v=nat2",
+    "url": "/assets/models/pack/bluecheekbutterflyfish/bluecheekbutterflyfish.glb?v=bright2",
     "frame": {
       "body": "z",
       "up": "y",
@@ -207,7 +207,7 @@
   {
     "name": "discus1",
     "title": "Дискус",
-    "url": "/assets/models/pack/discus1/discus1.glb?v=nat2",
+    "url": "/assets/models/pack/discus1/discus1.glb?v=bright2",
     "frame": {
       "body": "z",
       "up": "y",
