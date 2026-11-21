@@ -44,23 +44,6 @@
     }
 
   
-        for (var i = 0; i < a.count; i++) {
-          var base = i * itemSize;
-          var r = raw[base] / denom;
-          var g = raw[base + 1] / denom;
-          var b = raw[base + 2] / denom;
-          var al = itemSize > 3 ? raw[base + 3] / denom : 1;
-          out[i * 4] = linear(Math.max(0, Math.min(1, r)));
-          out[i * 4 + 1] = linear(Math.max(0, Math.min(1, g)));
-          out[i * 4 + 2] = linear(Math.max(0, Math.min(1, b)));
-          out[i * 4 + 3] = Math.max(0, Math.min(1, al));
-        }
-        var converted = new THREE.Float32BufferAttribute(out, 4);
-        converted._paSrgbLinearized = true;
-        o.geometry.setAttribute('color', converted);
-      });
-    }
-  
     function cacheKey(item) {
       return String(item.name) + '@' + String(item.url || '');
     }
