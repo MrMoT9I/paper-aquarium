@@ -735,6 +735,8 @@
     var phase = Math.random() * 6.28;
     clone.traverse(function (o) {
       if (!o.isMesh) return;
+      // paper-aquarium: color-only
+      if (o.geometry && o.geometry.getAttribute && o.geometry.getAttribute('color') && !o.geometry.getAttribute('normal') && o.geometry.computeVertexNormals) o.geometry.computeVertexNormals();
       if (spec.paintedTex) {
         // детская раскраска: текстура ложится по планарной UV шаблона,
         // сверху — бегущая каустика, единственный оставшийся «подводный» эффект
@@ -756,6 +758,7 @@
         // чтобы customProgramCacheKey увидел vertexColors.
         if (o.geometry && o.geometry.getAttribute && o.geometry.getAttribute('color')) {
           mat.vertexColors = true;
+          if (mat.color && mat.color.setHex) mat.color.setHex(0xffffff);
         }
         // тонкая подушка (китв/конёк): двусторонний материал + чуть ярче текстура
         if (!mat.map || (o.geometry && o.geometry.getAttribute && o.geometry.getAttribute('color'))) {
@@ -1341,7 +1344,7 @@
   // рыбок не подселяем: иначе первый список отбросит их все как «нет шаблона».
   // Поэтому и поток событий, и опросы стартуют только отсюда.
   function initPainted() {
-    fetch('/assets/coloring/manifest.json?v=sea21')
+    fetch('/assets/coloring/manifest.json?v=sea23')
       .then(function (r) { return r.json(); })
       .then(function (m) {
         m.fish.forEach(function (f) { paintedSpec[f.name] = { length: f.length, sheetView: f.sheetView || null }; });
@@ -1890,7 +1893,7 @@
   function listPack() {
     if (packListed) return;
     packListed = true;
-    fetch('/assets/coloring/manifest.json?v=sea21')
+    fetch('/assets/coloring/manifest.json?v=sea23')
       .then(function (r) { return r.json(); })
       .then(function (m) {
         (m.fish || []).forEach(function (f) { sheetTitles[f.name] = f.titles || { ru: f.title }; });

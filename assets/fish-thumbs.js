@@ -18,8 +18,8 @@
   // прогоняет модели по очереди и отдаёт картинку строкой. Результат кэшируем
   // на сессию — карточки и выбор рыбки берут из одного кэша.
   var Thumbs = (function () {
-    var cache = {};      // model → dataURL
-    var waiting = {};    // model → [callbacks]
+    var cache = {};      // name@url → dataURL
+    var waiting = {};    // name@url → [callbacks]
     var queue = [], busy = false;
     var renderer = null, scene = null, camera = null, loader = null;
     var W = 232, H = 148;
@@ -43,10 +43,14 @@
       return renderer;
     }
 
-    function done(name, url) {
-      cache[name] = url;
-      (waiting[name] || []).forEach(function (cb) { cb(url); });
-      delete waiting[name];
+    function cacheKey(item) {
+      return String(item.name) + '@' + String(item.url || '');
+    }
+
+    function done(key, url) {
+      cache[key] = url;
+      (waiting[key] || []).forEach(function (cb) { cb(url); });
+      delete waiting[key];
       busy = false;
       pump();
     }
@@ -61,16 +65,40 @@
         // У скиннед-мешей сфера отсечения считается по позе привязки и часто
         // врёт: рыба целиком выпадает из кадра, хотя стоит по центру. Для
         // одиночного рендера отсечение не нужно вовсе — выключаем.
-        root.traverse(function (o) { if (o.isMesh) o.frustumCulled = false; });
+        root.traverse(function (o) {
+          if (!o.isMesh) return;
+          o.frustumCulled = false;
+          // paper-aquarium: color-only
+          if (o.geometry && o.geometry.getAttribute && o.geometry.getAttribute('color') && !o.geometry.getAttribute('normal') && o.geometry.computeVertexNormals) o.geometry.computeVertexNormals();
+          var mats = Array.isArray(o.material) ? o.material : [o.material];
+          mats.forEach(function (m) {
+            if (!m) return;
+            if (o.geometry && o.geometry.getAttribute && o.geometry.getAttribute('color')) {
+              m.vertexColors = true;
+              if (m.color && m.color.setHex) m.color.setHex(0xffffff);
+            }
+            // Текстурные pillow (кит/конёк/сом): без sRGB карта выглядит серой.
+            if (m.map) {
+              if ('colorSpace' in m.map) m.map.colorSpace = THREE.SRGBColorSpace;
+              else m.map.encoding = THREE.sRGBEncoding;
+              m.map.needsUpdate = true;
+            }
+            m.side = THREE.DoubleSide;
+            m.needsUpdate = true;
+          });
+        });
 
-        // Ориентацию берём тем же разбором, что и сцена: габаритной прикидке
-        // здесь верить нельзя — дискусы и крылатка вставали к камере анфас.
+        // Ориентацию: сначала frame из pack.json (как в аквариуме), иначе
+        // скелет, иначе габарит. Без frame акула/конёк вставали к камере «с торца».
         var sk = FishFrame.fromSkeleton(gltf);
         var b = FishFrame.bounds(root);
         var ord = [['x', b.size.x], ['y', b.size.y], ['z', b.size.z]]
           .sort(function (p, q) { return q[1] - p[1]; });
-        var axes = sk ? sk.axes : { body: ord[0][0], up: ord[1][0], lat: ord[2][0] };
-        var headAtMax = sk ? sk.headAtMax : true;
+        var fr = item.frame;
+        var axes = fr
+          ? { body: fr.body, up: fr.up, lat: fr.lat }
+          : (sk ? sk.axes : { body: ord[0][0], up: ord[1][0], lat: ord[2][0] });
+        var headAtMax = fr ? !!fr.headAtMax : (sk ? sk.headAtMax : true);
 
         root.position.sub(b.center);
         var pivot = new THREE.Group();
@@ -85,21 +113,22 @@
         holder.add(pivot);
         scene.add(holder);
 
-        var along = b.size[axes.body] || 1;
-        camera.position.set(0, 0, along * 1.55);
+        var along = Math.max(b.size.x, b.size.y, b.size.z) || 1;
+        camera.position.set(0, 0, along * 1.7);
         camera.lookAt(0, 0, 0);
         renderer.render(scene, camera);
         var url = renderer.domElement.toDataURL('image/png');
         scene.remove(holder);
-        done(item.name, url);
-      }, undefined, function () { done(item.name, null); });
+        done(cacheKey(item), url);
+      }, undefined, function () { done(cacheKey(item), null); });
     }
 
     return {
       get: function (item, cb) {
-        if (cache[item.name] !== undefined) return cb(cache[item.name]);
-        if (waiting[item.name]) { waiting[item.name].push(cb); return; }
-        waiting[item.name] = [cb];
+        var key = cacheKey(item);
+        if (cache[key] !== undefined) return cb(cache[key]);
+        if (waiting[key]) { waiting[key].push(cb); return; }
+        waiting[key] = [cb];
         queue.push(item);
         pump();
       }

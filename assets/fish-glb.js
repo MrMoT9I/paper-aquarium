@@ -213,11 +213,14 @@
     clone.traverse(function (o) {
       if (!o.isMesh) return;
       o.castShadow = true;
+      // paper-aquarium: color-only
+      if (o.geometry && o.geometry.getAttribute && o.geometry.getAttribute('color') && !o.geometry.getAttribute('normal') && o.geometry.computeVertexNormals) o.geometry.computeVertexNormals();
       var mats = (Array.isArray(o.material) ? o.material : [o.material]).map(function (m) { return m.clone(); });
       mats.forEach(function (m) {
         tuneMaterial(m);
         if (o.geometry && o.geometry.getAttribute && o.geometry.getAttribute('color')) {
           m.vertexColors = true;
+          if (m.color && m.color.setHex) m.color.setHex(0xffffff);
           m.needsUpdate = true;
         }
         if (!mixer && bendAmp > 0) addBend(m, spec.info, bendAmp, phase);

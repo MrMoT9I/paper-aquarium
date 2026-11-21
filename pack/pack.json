@@ -14,7 +14,7 @@
   {
     "name": "whale",
     "title": "Горбатый кит",
-    "url": "/assets/models/pack/whale/whale.glb?v=hump1",
+    "url": "/assets/models/pack/whale/whale.glb?v=userExact1",
     "frame": {
       "body": "z",
       "up": "y",

@@ -189,7 +189,7 @@
      покупных рыб в превью развернётся хвостом вперёд -->
 <script src="/assets/fish-frame.js"></script>
 <script src="/assets/fish-glb.js"></script>
-<script src="/assets/capture.js"></script>
+<script src="/assets/capture.js?v=fix1"></script>
 <script src="/assets/tank.js"></script>
 <script>
 (function () {
@@ -389,7 +389,7 @@
     document.getElementById(id).classList.add('on');
   }
 
-  fetch('/assets/coloring/manifest.json')
+  fetch('/assets/coloring/manifest.json?v=sea23')
     .then(function (r) { return r.json(); })
     .then(function (m) { manifest = m; })
     .catch(function () {
