@@ -161,6 +161,34 @@
     try { return FishFrame.fromSkeleton(gltf); } catch (e) { return null; }
   }
 
+
+  function linearizeUploadedWhaleColors(root) {
+    // The uploaded GLB stores COLOR_0 as normalized sRGB bytes. Three r128
+    // treats vertex colors as linear, which washes the dark humpback to pale blue.
+    root.traverse(function (o) {
+      if (!o.isMesh || !o.geometry || !o.geometry.getAttribute) return;
+      var a = o.geometry.getAttribute('color');
+      if (!a || a._paSrgbLinearized) return;
+      var out = new Float32Array(a.count * 4);
+      var raw = a.array || (a.data && a.data.array);
+      var denom = a.normalized && raw instanceof Uint8Array ? 255 :
+        (a.normalized && raw instanceof Uint16Array ? 65535 : 1);
+      function linear(c) {
+        c = Math.max(0, Math.min(1, c / denom));
+        return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+      }
+      for (var i = 0; i < a.count; i++) {
+        out[i * 4] = linear(a.getX(i));
+        out[i * 4 + 1] = linear(a.getY(i));
+        out[i * 4 + 2] = linear(a.getZ(i));
+        out[i * 4 + 3] = a.itemSize > 3 ? Math.max(0, Math.min(1, a.getW(i) / denom)) : 1;
+      }
+      var converted = new THREE.Float32BufferAttribute(out, 4);
+      converted._paSrgbLinearized = true;
+      o.geometry.setAttribute('color', converted);
+    });
+  }
+
   // Загружаем список спеков {url, length, bend?, headAtMax?}.
   // Успех: spec.gltf + spec.info. Ошибка — молча пропускаем (спек без .gltf),
   // сцена сама решает, чем заменить. onDone(количество успешных).
@@ -175,6 +203,7 @@
     specs.forEach(function (spec) {
       loader.load(spec.url,
         function (gltf) {
+          if (spec.name === 'whale' && /userExact/.test(spec.url || '')) linearizeUploadedWhaleColors(gltf.scene);
           spec.gltf = gltf;
           spec.info = normalizeFish(gltf.scene, spec.length,
             typeof spec.headAtMax === 'boolean' ? { headAtMax: spec.headAtMax } : skelOf(gltf));
