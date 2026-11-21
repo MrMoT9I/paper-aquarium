@@ -4,3 +4,4 @@ seahorse/ — CC0 lined seahorse (3DAssets.dev), sheet from GLB silhouette.
 catfish/ — silhouette pillow from user catfish outline + paint (sheet+3D).
 sawfish/ — user sawfish.glb + natural vertex colors; silhouette from line art.
 ray/ — user ray.glb (manta) + natural vertex colors; top-down silhouette sheet.
+whale/ — humpback pillow (sealed) + coloring contour; length = shark×1.10.
