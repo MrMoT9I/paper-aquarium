@@ -44,24 +44,34 @@
     }
 
   
-    function linearizeUploadedWhaleColors(root) {
+        function linearizeUploadedWhaleColors(root) {
       // The uploaded GLB stores COLOR_0 as normalized sRGB bytes. Three r128
       // treats vertex colors as linear, which washes the dark humpback to pale blue.
       root.traverse(function (o) {
-        if (!o.isMesh || !o.geometry || !o.geometry.getAttribute) return;
+        if (!o || !o.isMesh || !o.geometry || !o.geometry.getAttribute) return;
         var a = o.geometry.getAttribute('color');
         if (!a || a._paSrgbLinearized) return;
+        var raw = a.array || (a.data && a.data.array);
+        if (!raw) return;
+        var isByte = raw.constructor && raw.constructor.name === 'Uint8Array';
+        var isShort = raw.constructor && raw.constructor.name === 'Uint16Array';
+        var denom = (a.normalized && isByte) ? 255 : ((a.normalized && isShort) ? 65535 : 1);
+        var itemSize = a.itemSize;
         var out = new Float32Array(a.count * 4);
-        // getX/getY/getZ already return 0..1 for normalized COLOR_0 — do not divide by 255 again
         function linear(c) {
-          c = Math.max(0, Math.min(1, c));
-          return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+          if (c <= 0.04045) return c / 12.92;
+          return Math.pow((c + 0.055) / 1.055, 2.4);
         }
         for (var i = 0; i < a.count; i++) {
-          out[i * 4] = linear(a.getX(i));
-          out[i * 4 + 1] = linear(a.getY(i));
-          out[i * 4 + 2] = linear(a.getZ(i));
-          out[i * 4 + 3] = a.itemSize > 3 ? Math.max(0, Math.min(1, a.getW(i))) : 1;
+          var base = i * itemSize;
+          var r = raw[base] / denom;
+          var g = raw[base + 1] / denom;
+          var b = raw[base + 2] / denom;
+          var al = itemSize > 3 ? raw[base + 3] / denom : 1;
+          out[i * 4] = linear(Math.max(0, Math.min(1, r)));
+          out[i * 4 + 1] = linear(Math.max(0, Math.min(1, g)));
+          out[i * 4 + 2] = linear(Math.max(0, Math.min(1, b)));
+          out[i * 4 + 3] = Math.max(0, Math.min(1, al));
         }
         var converted = new THREE.Float32BufferAttribute(out, 4);
         converted._paSrgbLinearized = true;
