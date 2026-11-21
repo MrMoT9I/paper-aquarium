@@ -777,7 +777,7 @@
       // Тело гнём сами, если его не гнёт клип: либо скелета нет вовсе, либо
       // в клипе шевелятся одни плавники (см. clipBeatHz). Скиннинг при этом
       // остаётся — плавники продолжают работать от своего клипа.
-      var bend = beatHz ? 0 : (spec.bend || 0.35);
+      var bend = beatHz ? 0 : (spec.bend != null ? spec.bend : 0.35);
       if (bend > 0) addBend(o.material, spec.info, bend, phase);
     });
 
@@ -1264,7 +1264,7 @@
         if (name === 'whale' && /userExact/.test(item.url || '')) linearizeUploadedWhaleColors(gltf.scene);
         var known = paintedSpec[name];
         var spec = {
-          name: name, gltf: gltf, bend: 0,
+          name: name, gltf: gltf, bend: (item && item.bend != null) ? item.bend : 0,
           // длина: pack.json → манифест → запас. Иначе при гонке оставался PACK_LEN
           // и модель навсегда кешировалась мелкой.
           length: (item && item.length) || (known && known.length) || PACK_LEN,

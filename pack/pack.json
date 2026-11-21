@@ -14,14 +14,15 @@
   {
     "name": "whale",
     "title": "Горбатый кит",
-    "url": "/assets/models/pack/whale/whale.glb?v=sealed14",
+    "url": "/assets/models/pack/whale/whale-sealed14.glb?v=1",
     "frame": {
       "body": "z",
       "up": "y",
       "lat": "x",
       "headAtMax": true
     },
-    "length": 14
+    "length": 14,
+    "bend": 0
   },
   {
     "name": "seahorse",
