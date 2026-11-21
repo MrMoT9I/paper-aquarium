@@ -220,7 +220,7 @@ function titleOf(f) {
   return (f.titles && (f.titles[I18N.lang] || f.titles.ru)) || f.title;
 }
 
-fetch('/assets/coloring/manifest.json?v=sea19', { cache: 'no-store' })
+fetch('/assets/coloring/manifest.json?v=sea20', { cache: 'no-store' })
   .then(function (r) { return r.json(); })
   .then(function (m) {
     var list = document.getElementById('list');

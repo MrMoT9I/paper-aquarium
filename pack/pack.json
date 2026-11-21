@@ -24,6 +24,18 @@
     "length": 20
   },
   {
+    "name": "sperm_whale",
+    "title": "Кашалот",
+    "url": "/assets/models/pack/sperm_whale/sperm_whale.glb?v=bright1",
+    "frame": {
+      "body": "z",
+      "up": "y",
+      "lat": "x",
+      "headAtMax": true
+    },
+    "length": 16
+  },
+  {
     "name": "seahorse",
     "title": "Морской конёк",
     "url": "/assets/models/pack/seahorse/seahorse.glb?v=tex3",
