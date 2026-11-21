@@ -153,10 +153,18 @@
         // плывущая назад — глаз ждёт движения по направлению чтения.
         var holder = new THREE.Group();
         holder.rotation.y = Math.PI / 2;
+        // paper-aquarium: whale has wide pectorals along the lateral axis. A pure
+        // side view hides them, so show the whale as 3/4 top so the pectorals and
+        // dorsal fin read clearly in the picker thumb.
+        if (item.name === 'whale') {
+          holder.rotation.y = Math.PI / 2 + Math.PI / 6;
+          holder.rotation.x = -Math.PI / 7;
+        }
         holder.add(pivot);
         scene.add(holder);
 
         var along = Math.max(b.size.x, b.size.y, b.size.z) || 1;
+        if (item.name === 'whale') along = Math.max(along, b.size.x * 1.4);
         camera.position.set(0, 0, along * 1.7);
         camera.lookAt(0, 0, 0);
         renderer.render(scene, camera);
