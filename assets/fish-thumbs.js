@@ -44,24 +44,6 @@
     }
 
   
-        function linearizeUploadedWhaleColors(root) {
-      // The uploaded GLB stores COLOR_0 as normalized sRGB bytes. Three r128
-      // treats vertex colors as linear, which washes the dark humpback to pale blue.
-      root.traverse(function (o) {
-        if (!o || !o.isMesh || !o.geometry || !o.geometry.getAttribute) return;
-        var a = o.geometry.getAttribute('color');
-        if (!a || a._paSrgbLinearized) return;
-        var raw = a.array || (a.data && a.data.array);
-        if (!raw) return;
-        var isByte = raw.constructor && raw.constructor.name === 'Uint8Array';
-        var isShort = raw.constructor && raw.constructor.name === 'Uint16Array';
-        var denom = (a.normalized && isByte) ? 255 : ((a.normalized && isShort) ? 65535 : 1);
-        var itemSize = a.itemSize;
-        var out = new Float32Array(a.count * 4);
-        function linear(c) {
-          if (c <= 0.04045) return c / 12.92;
-          return Math.pow((c + 0.055) / 1.055, 2.4);
-        }
         for (var i = 0; i < a.count; i++) {
           var base = i * itemSize;
           var r = raw[base] / denom;
@@ -98,7 +80,6 @@
       var item = queue.shift();
       loader.load(item.url, function (gltf) {
         var root = gltf.scene;
-        if (item.name === 'whale' && /userExact/.test(item.url || '')) linearizeUploadedWhaleColors(root);
         // У скиннед-мешей сфера отсечения считается по позе привязки и часто
         // врёт: рыба целиком выпадает из кадра, хотя стоит по центру. Для
         // одиночного рендера отсечение не нужно вовсе — выключаем.
@@ -153,18 +134,6 @@
         // плывущая назад — глаз ждёт движения по направлению чтения.
         var holder = new THREE.Group();
         holder.rotation.y = Math.PI / 2;
-        // paper-aquarium: whale has wide pectorals along the lateral axis. A pure
-        // side view hides them, so show the whale as 3/4 top so the pectorals and
-        // dorsal fin read clearly in the picker thumb.
-        if (item.name === 'whale') {
-          holder.rotation.y = Math.PI / 2 + Math.PI / 6;
-          holder.rotation.x = -Math.PI / 7;
-        }
-        holder.add(pivot);
-        scene.add(holder);
-
-        var along = Math.max(b.size.x, b.size.y, b.size.z) || 1;
-        if (item.name === 'whale') along = Math.max(along, b.size.x * 1.4);
         camera.position.set(0, 0, along * 1.7);
         camera.lookAt(0, 0, 0);
         renderer.render(scene, camera);

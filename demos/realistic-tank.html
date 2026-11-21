@@ -1208,24 +1208,6 @@
   }
 
 
-    function linearizeUploadedWhaleColors(root) {
-    // The uploaded GLB stores COLOR_0 as normalized sRGB bytes. Three r128
-    // treats vertex colors as linear, which washes the dark humpback to pale blue.
-    root.traverse(function (o) {
-      if (!o || !o.isMesh || !o.geometry || !o.geometry.getAttribute) return;
-      var a = o.geometry.getAttribute('color');
-      if (!a || a._paSrgbLinearized) return;
-      var raw = a.array || (a.data && a.data.array);
-      if (!raw) return;
-      var isByte = raw.constructor && raw.constructor.name === 'Uint8Array';
-      var isShort = raw.constructor && raw.constructor.name === 'Uint16Array';
-      var denom = (a.normalized && isByte) ? 255 : ((a.normalized && isShort) ? 65535 : 1);
-      var itemSize = a.itemSize;
-      var out = new Float32Array(a.count * 4);
-      function linear(c) {
-        if (c <= 0.04045) return c / 12.92;
-        return Math.pow((c + 0.055) / 1.055, 2.4);
-      }
       for (var i = 0; i < a.count; i++) {
         var base = i * itemSize;
         var r = raw[base] / denom;
@@ -1261,7 +1243,6 @@
       }
       packModels[name] = 'loading';
       gltfLoader().load(item.url, function (gltf) {
-        if (name === 'whale' && /userExact/.test(item.url || '')) linearizeUploadedWhaleColors(gltf.scene);
         var known = paintedSpec[name];
         var spec = {
           name: name, gltf: gltf, bend: (item && item.bend != null) ? item.bend : 0,
