@@ -60,6 +60,19 @@
     "length": 5.2
   },
   {
+    "name": "ray",
+    "title": "Манта",
+    "url": "/assets/models/pack/ray/ray.glb?v=nat1",
+    "frame": {
+      "body": "z",
+      "up": "y",
+      "lat": "x",
+      "headAtMax": true
+    },
+    "length": 3.8,
+    "sheetView": "top"
+  },
+  {
     "name": "clownfish",
     "title": "Рыба-клоун",
     "url": "/assets/models/pack/clownfish/clownfish.glb?v=fill2",

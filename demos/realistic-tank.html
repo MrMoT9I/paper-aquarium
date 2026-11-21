@@ -1096,8 +1096,10 @@
     var meshes = [];
     clone.traverse(function (o) { if (o.isMesh) meshes.push(o); });
 
+    // После normalizeFish: нос → +Z, спина → +Y, бок → +X.
+    // Обычные рыбы: лист сбоку → UV (z, y). Плоские (манта): лист сверху → (z, x).
     var v = new THREE.Vector3();
-    var min = { z: Infinity, y: Infinity }, max = { z: -Infinity, y: -Infinity };
+    var min = { z: Infinity, y: Infinity, x: Infinity }, max = { z: -Infinity, y: -Infinity, x: -Infinity };
     meshes.forEach(function (o) {
       var p = o.geometry.attributes.position;
       for (var i = 0; i < p.count; i++) {
@@ -1106,9 +1108,16 @@
         if (v.z > max.z) max.z = v.z;
         if (v.y < min.y) min.y = v.y;
         if (v.y > max.y) max.y = v.y;
+        if (v.x < min.x) min.x = v.x;
+        if (v.x > max.x) max.x = v.x;
       }
     });
-    var spanZ = Math.max(max.z - min.z, 1e-6), spanY = Math.max(max.y - min.y, 1e-6);
+    var spanZ = Math.max(max.z - min.z, 1e-6);
+    var spanY = Math.max(max.y - min.y, 1e-6);
+    var spanX = Math.max(max.x - min.x, 1e-6);
+    var topView = !!(base.sheetView === 'top' || (packList || []).some(function (f) {
+      return f && f.name === kind && f.sheetView === 'top';
+    }) || spanY < spanX * 0.35);
 
     meshes.forEach(function (o) {
       var g = o.geometry = o.geometry.clone();
@@ -1116,8 +1125,10 @@
       var uv = new Float32Array(p.count * 2);
       for (var i = 0; i < p.count; i++) {
         v.fromBufferAttribute(p, i).applyMatrix4(o.matrixWorld);
-        uv[i * 2] = (v.z - min.z) / spanZ;          // u: хвост → нос
-        uv[i * 2 + 1] = (v.y - min.y) / spanY;      // v: брюхо → спина
+        uv[i * 2] = (v.z - min.z) / spanZ;
+        uv[i * 2 + 1] = topView
+          ? (v.x - min.x) / spanX
+          : (v.y - min.y) / spanY;
       }
       g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     });
@@ -1216,7 +1227,8 @@
           name: name, gltf: gltf, bend: 0,
           // длина: pack.json → манифест → запас. Иначе при гонке оставался PACK_LEN
           // и модель навсегда кешировалась мелкой.
-          length: (item && item.length) || (known && known.length) || PACK_LEN
+          length: (item && item.length) || (known && known.length) || PACK_LEN,
+          sheetView: (item && item.sheetView) || (known && known.sheetView) || null
         };
         // frame из pack.json — для силуэтов по контуру раскраски (нос +Z, спина +Y).
         // Иначе габаритный эвристик путает голову/хвост на тонкой выдавливании
@@ -1329,10 +1341,10 @@
   // рыбок не подселяем: иначе первый список отбросит их все как «нет шаблона».
   // Поэтому и поток событий, и опросы стартуют только отсюда.
   function initPainted() {
-    fetch('/assets/coloring/manifest.json?v=sea17')
+    fetch('/assets/coloring/manifest.json?v=sea18')
       .then(function (r) { return r.json(); })
       .then(function (m) {
-        m.fish.forEach(function (f) { paintedSpec[f.name] = { length: f.length }; });
+        m.fish.forEach(function (f) { paintedSpec[f.name] = { length: f.length, sheetView: f.sheetView || null }; });
       })
       .catch(function () { console.error('не загрузился манифест раскрасок'); })
       .then(startUpdates);
@@ -1878,7 +1890,7 @@
   function listPack() {
     if (packListed) return;
     packListed = true;
-    fetch('/assets/coloring/manifest.json?v=sea17')
+    fetch('/assets/coloring/manifest.json?v=sea18')
       .then(function (r) { return r.json(); })
       .then(function (m) {
         (m.fish || []).forEach(function (f) { sheetTitles[f.name] = f.titles || { ru: f.title }; });
