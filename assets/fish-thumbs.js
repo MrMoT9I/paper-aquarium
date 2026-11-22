@@ -117,6 +117,10 @@
         // плывущая назад — глаз ждёт движения по направлению чтения.
         var holder = new THREE.Group();
         holder.rotation.y = Math.PI / 2;
+        holder.add(pivot);
+        scene.add(holder);
+
+        var along = Math.max(b.size.x, b.size.y, b.size.z) || 1;
         camera.position.set(0, 0, along * 1.7);
         camera.lookAt(0, 0, 0);
         renderer.render(scene, camera);

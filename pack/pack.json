@@ -12,19 +12,6 @@
     "length": 7.92
   },
   {
-    "name": "whale",
-    "title": "Горбатый кит",
-    "url": "/assets/models/pack/whale/whale.glb?v=likeShark1",
-    "frame": {
-      "body": "z",
-      "up": "y",
-      "lat": "x",
-      "headAtMax": true
-    },
-    "length": 8.71,
-    "bend": 0
-  },
-  {
     "name": "seahorse",
     "title": "Морской конёк",
     "url": "/assets/models/pack/seahorse/seahorse.glb?v=tex3",
