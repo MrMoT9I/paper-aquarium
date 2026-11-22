@@ -1346,7 +1346,7 @@
   // рыбок не подселяем: иначе первый список отбросит их все как «нет шаблона».
   // Поэтому и поток событий, и опросы стартуют только отсюда.
   function initPainted() {
-    fetch('/assets/coloring/manifest.json?v=sea25')
+    fetch('/assets/coloring/manifest.json?v=sea26')
       .then(function (r) { return r.json(); })
       .then(function (m) {
         m.fish.forEach(function (f) { paintedSpec[f.name] = { length: f.length, sheetView: f.sheetView || null }; });
@@ -1895,7 +1895,7 @@
   function listPack() {
     if (packListed) return;
     packListed = true;
-    fetch('/assets/coloring/manifest.json?v=sea25')
+    fetch('/assets/coloring/manifest.json?v=sea26')
       .then(function (r) { return r.json(); })
       .then(function (m) {
         (m.fish || []).forEach(function (f) { sheetTitles[f.name] = f.titles || { ru: f.title }; });

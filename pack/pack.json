@@ -48,6 +48,18 @@
     "length": 5.2
   },
   {
+    "name": "pike",
+    "title": "Щука",
+    "url": "/assets/models/pack/pike/pike.glb?v=nat1",
+    "frame": {
+      "body": "z",
+      "up": "y",
+      "lat": "x",
+      "headAtMax": true
+    },
+    "length": 5
+  },
+  {
     "name": "ray",
     "title": "Скат",
     "url": "/assets/models/pack/ray/ray.glb?v=fix2",
