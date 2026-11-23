@@ -120,6 +120,7 @@
       uHeadAtMax: { value: info.headAtMax ? 1 : 0 }
     };
     var prev = mat.onBeforeCompile;
+    var prevKey = mat.customProgramCacheKey;
     mat.onBeforeCompile = function (shader) {
       if (prev) prev.call(this, shader);
       Object.keys(uniforms).forEach(function (k) { shader.uniforms[k] = uniforms[k]; });
@@ -137,7 +138,12 @@
           'transformed += uLatMask * w;'
         ].join('\n'));
     };
-    mat.customProgramCacheKey = function () { return prev ? 'fishglb-prev+bend' : 'fishglb-bend'; };
+    // без +vc акула/текстурная рыба делит шейдер с коньком/китом → однотон
+    mat.customProgramCacheKey = function () {
+      return (prevKey ? prevKey.call(this) : '') +
+        (prev ? '|fishglb-prev' : '') + '|bend' +
+        (this.vertexColors ? '+vc' : '') + (this.map ? '+map' : '');
+    };
     return mat;
   }
 
@@ -154,6 +160,8 @@
     if (!window.FishFrame) return null;
     try { return FishFrame.fromSkeleton(gltf); } catch (e) { return null; }
   }
+
+
 
   // Загружаем список спеков {url, length, bend?, headAtMax?}.
   // Успех: spec.gltf + spec.info. Ошибка — молча пропускаем (спек без .gltf),
@@ -207,9 +215,16 @@
     clone.traverse(function (o) {
       if (!o.isMesh) return;
       o.castShadow = true;
+      // paper-aquarium: color-only
+      if (o.geometry && o.geometry.getAttribute && o.geometry.getAttribute('color') && !o.geometry.getAttribute('normal') && o.geometry.computeVertexNormals) o.geometry.computeVertexNormals();
       var mats = (Array.isArray(o.material) ? o.material : [o.material]).map(function (m) { return m.clone(); });
       mats.forEach(function (m) {
         tuneMaterial(m);
+        if (o.geometry && o.geometry.getAttribute && o.geometry.getAttribute('color')) {
+          m.vertexColors = true;
+          if (m.color && m.color.setHex) m.color.setHex(0xffffff);
+          m.needsUpdate = true;
+        }
         if (!mixer && bendAmp > 0) addBend(m, spec.info, bendAmp, phase);
         allMats.push(m);
       });
@@ -246,12 +261,20 @@
       var colors = new Float32Array(count * 3);
       var mats = Array.isArray(o.material) ? o.material : [o.material];
       var groups = (g.groups && g.groups.length) ? g.groups : [{ start: 0, count: count, materialIndex: 0 }];
+      var hasVC = !!(g.attributes.color);
+      var vc = hasVC ? g.attributes.color.array : null;
       groups.forEach(function (gr) {
         var m = mats[gr.materialIndex] || mats[0];
         var c = (m && m.color) || { r: 1, g: 1, b: 1 };
         var end = Math.min(gr.start + gr.count, count);
         for (var i = gr.start; i < end; i++) {
-          colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
+          if (hasVC) {
+            colors[i * 3] = vc[i * 3] * c.r;
+            colors[i * 3 + 1] = vc[i * 3 + 1] * c.g;
+            colors[i * 3 + 2] = vc[i * 3 + 2] * c.b;
+          } else {
+            colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
+          }
         }
       });
 
