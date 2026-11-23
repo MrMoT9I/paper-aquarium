@@ -1153,7 +1153,7 @@
         // плавник. Планарная UV живёт в вершинах и от скиннинга не съезжает.
         gltf: { scene: tpl.scene, animations: base.gltf.animations || [] },
         info: base.info,
-        speed: 1.7, bend: 0,
+        speed: 1.7, bend: undefined,
         // Модель шаблона потом домасштабируется до len, поэтому настоящая
         // длина рыбки в сцене — именно она.
         length: len,
@@ -1229,7 +1229,7 @@
       gltfLoader().load(item.url, function (gltf) {
         var known = paintedSpec[name];
         var spec = {
-          name: name, gltf: gltf, bend: (item && item.bend != null) ? item.bend : 0,
+          name: name, gltf: gltf, bend: (item && item.bend != null) ? item.bend : undefined,
           // длина: pack.json → манифест → запас. Иначе при гонке оставался PACK_LEN
           // и модель навсегда кешировалась мелкой.
           length: (item && item.length) || (known && known.length) || PACK_LEN,
@@ -1270,7 +1270,7 @@
         info: base.info,
         length: base.length,
         speed: 1.2 + Math.random() * 0.6,
-        bend: 0
+        bend: base.bend
       };
       holder.fish = new Fish(spec, 0);
       fishes.push(holder.fish);
@@ -1346,7 +1346,7 @@
   // рыбок не подселяем: иначе первый список отбросит их все как «нет шаблона».
   // Поэтому и поток событий, и опросы стартуют только отсюда.
   function initPainted() {
-    fetch('/assets/coloring/manifest.json?v=sea26')
+    fetch('/assets/coloring/manifest.json?v=sea27')
       .then(function (r) { return r.json(); })
       .then(function (m) {
         m.fish.forEach(function (f) { paintedSpec[f.name] = { length: f.length, sheetView: f.sheetView || null }; });
@@ -1895,7 +1895,7 @@
   function listPack() {
     if (packListed) return;
     packListed = true;
-    fetch('/assets/coloring/manifest.json?v=sea26')
+    fetch('/assets/coloring/manifest.json?v=sea27')
       .then(function (r) { return r.json(); })
       .then(function (m) {
         (m.fish || []).forEach(function (f) { sheetTitles[f.name] = f.titles || { ru: f.title }; });

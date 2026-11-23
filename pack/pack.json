@@ -50,14 +50,14 @@
   {
     "name": "pike",
     "title": "Щука",
-    "url": "/assets/models/pack/pike/pike.glb?v=nat1",
+    "url": "/assets/models/pack/pike/pike.glb?v=sz15",
     "frame": {
       "body": "z",
       "up": "y",
       "lat": "x",
       "headAtMax": true
     },
-    "length": 5
+    "length": 4.25
   },
   {
     "name": "ray",
