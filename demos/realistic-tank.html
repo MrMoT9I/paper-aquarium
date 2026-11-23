@@ -424,6 +424,23 @@
   var caustics = { value: 1 };
   var uTime = { value: 0 };
 
+  // ── «Ускорить» для слабых устройств ──────────────────────────────────────
+  // На слабой видеочасти (замер форка на Haier с Mali-G52: 5 fps на 40 рыбках
+  // против 54 в пустом аквариуме, главный поток простаивал) упор не в JS, а в
+  // закраску пикселей. Режим упрощает именно её: шейдеры в mediump (на Mali
+  // вдвое быстрее highp), материал рыб Blinn-Phong вместо PBR с отражениями,
+  // каустика по вершинам, а не по пикселям, кадр не крупнее экрана и без
+  // сглаживания. На глаз картинка та же, а работы видеокарте — на треть-вдвое
+  // меньше. Включается сам, когда аквариум заметил, что кадров мало (см.
+  // watchSlow), и запоминается на устройстве. ?fast=1 / ?fast=0 в адресе
+  // включают и выключают принудительно (с ?fast=0 автоматика молчит).
+  var FAST_KEY = 'aqua.fast';
+  var FAST_Q = new URLSearchParams(location.search).get('fast');
+  var FAST = (function () {
+    if (FAST_Q === '1' || FAST_Q === '0') return FAST_Q === '1';
+    try { return localStorage.getItem(FAST_KEY) === '1'; } catch (e) { return false; }
+  })();
+
   // ── каустика: подмешиваем в diffuse любого стандартного материала ────────
   var CAUSTIC_GLSL = [
     'float causticPattern(vec2 p, float t) {',
@@ -439,6 +456,7 @@
   ].join('\n');
 
   function addCaustics(mat, strength) {
+    if (FAST) return addCausticsVertex(mat, strength);
     mat.onBeforeCompile = function (shader) {
       shader.uniforms.uTime = uTime;
       shader.uniforms.uCaustics = caustics;
@@ -462,10 +480,48 @@
     return mat;
   }
 
+  // Та же каустика, но по вершинам: рябь меняется на масштабе ~1 единицы,
+  // вершины рыбы стоят через 0.04–0.1 — на глаз разницы нет, а в пиксельном
+  // шейдере остаётся одно сложение.
+  function addCausticsVertex(mat, strength) {
+    mat.onBeforeCompile = function (shader) {
+      // своё имя: изгиб тела (addBend) тоже объявляет uTime в вершинном шейдере
+      shader.uniforms.uCausTime = uTime;
+      shader.uniforms.uCaustics = caustics;
+      shader.vertexShader = 'uniform float uCausTime;\nvarying float vCaus;\n' + CAUSTIC_GLSL + '\n' + shader.vertexShader.replace(
+        '#include <begin_vertex>',
+        ['#include <begin_vertex>',
+         'vec3 cw = (modelMatrix * vec4(transformed, 1.0)).xyz;',
+         'vCaus = causticPattern(cw.xz, uCausTime * 0.35) * (1.0 - clamp(cw.y / ' + LIT_DEPTH.toFixed(1) + ', 0.0, 1.0) * 0.65);'
+        ].join('\n')
+      );
+      shader.fragmentShader = 'varying float vCaus;\nuniform float uCaustics;\n' + shader.fragmentShader.replace(
+        '#include <map_fragment>',
+        '#include <map_fragment>\ndiffuseColor.rgb += vec3(0.45, 0.72, 0.85) * vCaus * ' + strength.toFixed(2) + ' * uCaustics;'
+      );
+    };
+    mat.customProgramCacheKey = function () { return 'caustic-v' + strength; };
+    return mat;
+  }
+
+  // Быстрый материал рыбы: Blinn-Phong с бликом, подобранным под roughness
+  // 0.55 стандартного, без выборки окружения. Отражения «комнаты» заменяет
+  // полусферический свет (см. init).
+  function fastMaterial(src, o) {
+    return new THREE.MeshPhongMaterial({
+      map: src.map || null, color: src.color ? src.color.clone() : new THREE.Color(0xffffff),
+      specular: 0x2b3238, shininess: 22,
+      side: src.side, transparent: !!src.transparent,
+      opacity: src.opacity === undefined ? 1 : src.opacity, alphaTest: src.alphaTest || 0,
+      skinning: !!o.isSkinnedMesh
+    });
+  }
+
   // ── сцена ────────────────────────────────────────────────────────────────
   function init() {
-    renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+    renderer = new THREE.WebGLRenderer({ antialias: !FAST, precision: FAST ? 'mediump' : 'highp' });
+    // в быстром режиме кадр не крупнее экрана: на 4K-телевизоре это втрое меньше пикселей
+    renderer.setPixelRatio(Math.min(devicePixelRatio, FAST ? 1 : 1.75));
     renderer.setSize(innerWidth, innerHeight);
     renderer.outputEncoding = THREE.sRGBEncoding;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;   // киношная тональная компрессия
@@ -488,10 +544,15 @@
 
     // Отражения на чешуе берём из процедурной «комнаты»: без окружения
     // PBR-материалы рыб выглядят плоско.
-    var pmrem = new THREE.PMREMGenerator(renderer);
-    pmrem.compileEquirectangularShader();
-    var envRT = pmrem.fromScene(new THREE.RoomEnvironment(), 0.04);
-    scene.environment = envRT.texture;
+    if (FAST) {
+      // вместо выборки окружения в каждом пикселе — полусфера: светлый верх, тёмный низ
+      scene.add(new THREE.HemisphereLight(0xcfe6f2, 0x2a3a44, 0.55));
+    } else {
+      var pmrem = new THREE.PMREMGenerator(renderer);
+      pmrem.compileEquirectangularShader();
+      var envRT = pmrem.fromScene(new THREE.RoomEnvironment(), 0.04);
+      scene.environment = envRT.texture;
+    }
 
     buildLights();
 
@@ -731,11 +792,15 @@
         // компилируется без скиннинга, и рыба остаётся в позе привязки —
         // скелет машет хвостом, а меш стоит доской. Заводской материал
         // покупной рыбы флаг получает от GLTFLoader, наш — нет.
-        o.material = addCaustics(new THREE.MeshStandardMaterial({
-          map: spec.paintedTex, roughness: 0.55, metalness: 0.05,
-          side: THREE.DoubleSide, envMapIntensity: 0.5,
-          skinning: !!o.isSkinnedMesh
-        }), 0.5);
+        o.material = addCaustics(FAST
+          ? fastMaterial({ map: spec.paintedTex, side: THREE.DoubleSide }, o)
+          : new THREE.MeshStandardMaterial({
+            map: spec.paintedTex, roughness: 0.55, metalness: 0.05,
+            side: THREE.DoubleSide, envMapIntensity: 0.5,
+            skinning: !!o.isSkinnedMesh
+          }), 0.5);
+      } else if (FAST) {
+        o.material = addCaustics(fastMaterial(o.material, o), 0.5);
       } else {
         // рыба со своей заводской текстурой — показываем как есть,
         // только клонируем материал, чтобы каустика не текла в общий
@@ -929,9 +994,9 @@
   function feedNow() {
     if (!foodGeo) {
       foodGeo = new THREE.SphereGeometry(0.09, 8, 6);
-      foodMat = new THREE.MeshStandardMaterial({
-        color: 0xd2913f, roughness: 0.9, emissive: 0x63421a, emissiveIntensity: 0.6
-      });
+      foodMat = FAST
+        ? new THREE.MeshLambertMaterial({ color: 0xd2913f, emissive: 0x63421a, emissiveIntensity: 0.6 })
+        : new THREE.MeshStandardMaterial({ color: 0xd2913f, roughness: 0.9, emissive: 0x63421a, emissiveIntensity: 0.6 });
     }
 
     // Каждая щепотка своя. Один параметр задаёт характер броска: у кучного
@@ -1387,6 +1452,35 @@
     takeShot(true, true);
   });
 
+  // ── замечаем, что устройство не тянет, и включаем ускоритель ─────────────
+  // Порог: SLOW_FPS кадров в секунду в среднем за SLOW_WINDOWS окон подряд по
+  // SLOW_WINDOW секунд. 45 — с запасом ниже 55–60 нормального устройства на
+  // экране 60 Гц, но выше зоны 40–50, где рывки уже видны. Ошибочное включение
+  // почти ничего не стоит (картинка на глаз та же), пропуск медленного — рывки
+  // весь вечер, поэтому порог держим повыше.
+  //
+  // Меряем только с рыбками (пустой аквариум быстрый везде), только в видимой
+  // вкладке и не раньше чем через 5 с после новой рыбки — загрузка модели даёт
+  // разовые рывки. Кадры длиннее 0.25 с не считаем: фон, сборка мусора.
+  // Включение — с перезагрузкой: сглаживание и точность задаются при создании
+  // WebGL-контекста. Модели уже в кэше, так что это одна короткая перезагрузка,
+  // а дальше устройство открывается сразу в быстром режиме.
+  var SLOW_FPS = 45, SLOW_WINDOW = 4, SLOW_WINDOWS = 2;
+  var slowSum = 0, slowFrames = 0, slowRun = 0, slowFrom = 0, lastFishCount = 0;
+  function watchSlow(dt, t) {
+    if (FAST || FAST_Q === '0' || document.hidden) return;
+    if (fishes.length !== lastFishCount) { lastFishCount = fishes.length; slowFrom = t + 5; slowSum = slowFrames = slowRun = 0; }
+    if (!fishes.length || t < slowFrom || dt <= 0 || dt > 0.25) return;
+    slowSum += dt; slowFrames++;
+    if (slowSum < SLOW_WINDOW) return;
+    slowRun = slowFrames / slowSum < SLOW_FPS ? slowRun + 1 : 0;
+    slowSum = slowFrames = 0;
+    if (slowRun < SLOW_WINDOWS) return;
+    try { localStorage.setItem(FAST_KEY, '1'); } catch (e) { return; }   // не запомнить — не дёргаем перезагрузкой
+    console.info('аквариум: кадров мало (< ' + SLOW_FPS + ' fps) — включаю ускоритель');
+    location.reload();
+  }
+
   // ── цикл ─────────────────────────────────────────────────────────────────
   function animate() {
     requestAnimationFrame(animate);
@@ -1394,6 +1488,7 @@
     var t = clock.elapsedTime;
     uTime.value = t;
 
+    watchSlow(dt, t);
     for (var i = 0; i < fishes.length; i++) fishes[i].update(dt, t);
     if (foods.length) updateFoods(dt, t);
 
