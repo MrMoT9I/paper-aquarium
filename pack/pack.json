@@ -12,6 +12,18 @@
     "length": 7.92
   },
   {
+    "name": "bluewhale",
+    "title": "Голубой кит",
+    "url": "/assets/models/pack/bluewhale/bluewhale.glb?v=photo2",
+    "frame": {
+      "body": "z",
+      "up": "y",
+      "lat": "x",
+      "headAtMax": true
+    },
+    "length": 7.92
+  },
+  {
     "name": "seahorse",
     "title": "Морской конёк",
     "url": "/assets/models/pack/seahorse/seahorse.glb?v=tex3",
