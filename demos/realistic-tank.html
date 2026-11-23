@@ -332,7 +332,7 @@
 <script src="/assets/i18n.js"></script>
 <script src="/vendor/qr.js"></script>
 <script src="/assets/fish-frame.js"></script>
-<script src="/assets/fish-thumbs.js"></script>
+<script src="/assets/fish-thumbs.js?v=paint2"></script>
 <script src="/assets/modal.js"></script>
 <script src="/assets/tank.js"></script>
 <script>
@@ -439,6 +439,7 @@
   ].join('\n');
 
   function addCaustics(mat, strength) {
+    var prevKey = mat.customProgramCacheKey;
     mat.onBeforeCompile = function (shader) {
       shader.uniforms.uTime = uTime;
       shader.uniforms.uCaustics = caustics;
@@ -458,7 +459,14 @@
           ].join('\n')
         );
     };
-    mat.customProgramCacheKey = function () { return 'caustic' + strength; };
+    // vertexColors/map обязаны быть в ключе: иначе акула без COLOR_0
+    // компилирует общий шейдер, и кит/конёк рисуются одним baseColor.
+    mat.customProgramCacheKey = function () {
+      return (prevKey ? prevKey.call(this) : '') +
+        '|caustic' + strength +
+        (this.vertexColors ? '+vc' : '') +
+        (this.map ? '+map' : '');
+    };
     return mat;
   }
 
@@ -621,6 +629,7 @@
     };
     // Раскраска могла уже занять onBeforeCompile — не затираем её, а достраиваем.
     var prev = mat.onBeforeCompile;
+    var prevKey = mat.customProgramCacheKey;
     mat.onBeforeCompile = function (shader) {
       if (prev) prev.call(this, shader);
       Object.keys(uniforms).forEach(function (k) { shader.uniforms[k] = uniforms[k]; });
@@ -639,7 +648,10 @@
           'transformed += uLatMask * w;'
         ].join('\n'));
     };
-    mat.customProgramCacheKey = function () { return prev ? 'paint+bend' : 'bend'; };
+    mat.customProgramCacheKey = function () {
+      return (prevKey ? prevKey.call(this) : '') +
+        '|bend' + (this.vertexColors ? '+vc' : '') + (this.map ? '+map' : '');
+    };
     return mat;
   }
 
@@ -723,6 +735,8 @@
     var phase = Math.random() * 6.28;
     clone.traverse(function (o) {
       if (!o.isMesh) return;
+      // paper-aquarium: color-only
+      if (o.geometry && o.geometry.getAttribute && o.geometry.getAttribute('color') && !o.geometry.getAttribute('normal') && o.geometry.computeVertexNormals) o.geometry.computeVertexNormals();
       if (spec.paintedTex) {
         // детская раскраска: текстура ложится по планарной UV шаблона,
         // сверху — бегущая каустика, единственный оставшийся «подводный» эффект
@@ -739,13 +753,31 @@
       } else {
         // рыба со своей заводской текстурой — показываем как есть,
         // только клонируем материал, чтобы каустика не текла в общий
-        o.material = addCaustics(o.material.clone(), 0.5);
-        o.material.envMapIntensity = 0.5;
+        var mat = o.material.clone();
+        // COLOR_0 у конька/кита (подушка без map) — до каустики/изгиба,
+        // чтобы customProgramCacheKey увидел vertexColors.
+        if (o.geometry && o.geometry.getAttribute && o.geometry.getAttribute('color')) {
+          mat.vertexColors = true;
+          if (mat.color && mat.color.setHex) mat.color.setHex(0xffffff);
+        }
+        // тонкая подушка (китв/конёк): двусторонний материал + чуть ярче текстура
+        if (!mat.map || (o.geometry && o.geometry.getAttribute && o.geometry.getAttribute('color'))) {
+          mat.side = THREE.DoubleSide;
+        }
+        if (mat.map) {
+          mat.side = THREE.DoubleSide;
+          mat.map.encoding = THREE.sRGBEncoding;
+          mat.map.needsUpdate = true;
+          mat.envMapIntensity = 0.7;
+        }
+        o.material = addCaustics(mat, 0.5);
+        if (!mat.map) o.material.envMapIntensity = 0.85;
+        o.material.needsUpdate = true;
       }
       // Тело гнём сами, если его не гнёт клип: либо скелета нет вовсе, либо
       // в клипе шевелятся одни плавники (см. clipBeatHz). Скиннинг при этом
       // остаётся — плавники продолжают работать от своего клипа.
-      var bend = beatHz ? 0 : (spec.bend || 0.35);
+      var bend = beatHz ? 0 : (spec.bend != null ? spec.bend : 0.35);
       if (bend > 0) addBend(o.material, spec.info, bend, phase);
     });
 
@@ -768,7 +800,10 @@
 
     // Рождаемся сразу внутри допустимого объёма на своей глубине, иначе
     // рыба стартует за краем кадра и первые секунды выгребает обратно.
-    var z0 = Z_FAR + Math.random() * (Z_NEAR - Z_FAR);
+    // Крупным — чаще дальняя половина объёма, чтобы не стартовали у камеры.
+    var zSpan = Z_NEAR - Z_FAR;
+    var zBias = Math.min(0.55, (this.radius || 1) / 3.2); // 0..0.55 к дальнему краю
+    var z0 = Z_FAR + Math.random() * zSpan * (1 - zBias);
     var l0 = limitsAt(z0);
     var inX = Math.max(0.5, l0.hw - MARGIN);
     var inLo = l0.yBot + MARGIN;
@@ -852,8 +887,11 @@
 
     var M = MARGIN;
     var W = 5;
+    // Крупные/высокие рыбы (ангел, дискус) не подпускаем к ближней стенке:
+    // иначе боковой силуэт закрывает пол-экрана и «крутится» на переднем плане.
+    var nearPad = M + this.radius * 1.15;
 
-    if (this.pos.z > Z_NEAR - M) _a.z -= W;
+    if (this.pos.z > Z_NEAR - nearPad) _a.z -= W * (1.2 + this.radius * 0.35);
     if (this.pos.z < Z_FAR + M) _a.z += W;
 
     // Боковые и вертикальные границы зависят от глубины: у ближней стенки
@@ -1061,8 +1099,10 @@
     var meshes = [];
     clone.traverse(function (o) { if (o.isMesh) meshes.push(o); });
 
+    // После normalizeFish: нос → +Z, спина → +Y, бок → +X.
+    // Обычные рыбы: лист сбоку → UV (z, y). Плоские (манта): лист сверху → (z, x).
     var v = new THREE.Vector3();
-    var min = { z: Infinity, y: Infinity }, max = { z: -Infinity, y: -Infinity };
+    var min = { z: Infinity, y: Infinity, x: Infinity }, max = { z: -Infinity, y: -Infinity, x: -Infinity };
     meshes.forEach(function (o) {
       var p = o.geometry.attributes.position;
       for (var i = 0; i < p.count; i++) {
@@ -1071,9 +1111,16 @@
         if (v.z > max.z) max.z = v.z;
         if (v.y < min.y) min.y = v.y;
         if (v.y > max.y) max.y = v.y;
+        if (v.x < min.x) min.x = v.x;
+        if (v.x > max.x) max.x = v.x;
       }
     });
-    var spanZ = Math.max(max.z - min.z, 1e-6), spanY = Math.max(max.y - min.y, 1e-6);
+    var spanZ = Math.max(max.z - min.z, 1e-6);
+    var spanY = Math.max(max.y - min.y, 1e-6);
+    var spanX = Math.max(max.x - min.x, 1e-6);
+    var topView = !!(base.sheetView === 'top' || (packList || []).some(function (f) {
+      return f && f.name === kind && f.sheetView === 'top';
+    }) || spanY < spanX * 0.35);
 
     meshes.forEach(function (o) {
       var g = o.geometry = o.geometry.clone();
@@ -1081,8 +1128,10 @@
       var uv = new Float32Array(p.count * 2);
       for (var i = 0; i < p.count; i++) {
         v.fromBufferAttribute(p, i).applyMatrix4(o.matrixWorld);
-        uv[i * 2] = (v.z - min.z) / spanZ;          // u: хвост → нос
-        uv[i * 2 + 1] = (v.y - min.y) / spanY;      // v: брюхо → спина
+        uv[i * 2] = (v.z - min.z) / spanZ;
+        uv[i * 2 + 1] = topView
+          ? (v.x - min.x) / spanX
+          : (v.y - min.y) / spanY;
       }
       g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     });
@@ -1104,7 +1153,7 @@
         // плавник. Планарная UV живёт в вершинах и от скиннинга не съезжает.
         gltf: { scene: tpl.scene, animations: base.gltf.animations || [] },
         info: base.info,
-        speed: 1.7, bend: 0,
+        speed: 1.7, bend: undefined,
         // Модель шаблона потом домасштабируется до len, поэтому настоящая
         // длина рыбки в сцене — именно она.
         length: len,
@@ -1158,6 +1207,8 @@
     });
   }
 
+
+
   function withPackModel(name, cb) {
     var cached = packModels[name];
     if (cached && cached !== 'loading') return cb(cached);
@@ -1165,15 +1216,33 @@
 
     var start = function () {
       var item = packList && packList.filter(function (m) { return m.name === name; })[0];
-      if (!item) return;
+      // Меню готовых рыбок читает только pack.json. Для раскрашенных листов
+      // модель всё равно нужна: если в списке нет — грузим по пути вида.
+      if (!item) {
+        item = {
+          name: name,
+          url: '/assets/models/pack/' + name + '/' + name + '.glb',
+          frame: { body: 'z', up: 'y', lat: 'x', headAtMax: true }
+        };
+      }
       packModels[name] = 'loading';
       gltfLoader().load(item.url, function (gltf) {
         var known = paintedSpec[name];
         var spec = {
-          name: name, gltf: gltf, bend: 0,
-          length: known && known.length ? known.length : PACK_LEN
+          name: name, gltf: gltf, bend: (item && item.bend != null) ? item.bend : undefined,
+          // длина: pack.json → манифест → запас. Иначе при гонке оставался PACK_LEN
+          // и модель навсегда кешировалась мелкой.
+          length: (item && item.length) || (known && known.length) || PACK_LEN,
+          sheetView: (item && item.sheetView) || (known && known.sheetView) || null
         };
-        spec.info = normalizeFish(gltf.scene, spec.length, FishFrame.fromSkeleton(gltf));
+        // frame из pack.json — для силуэтов по контуру раскраски (нос +Z, спина +Y).
+        // Иначе габаритный эвристик путает голову/хвост на тонкой выдавливании
+        // и переворачивает высокие модели (французский ангел).
+        var frame = item.frame;
+        var skel = frame
+          ? { axes: { body: frame.body, up: frame.up, lat: frame.lat }, headAtMax: !!frame.headAtMax }
+          : FishFrame.fromSkeleton(gltf);
+        spec.info = normalizeFish(gltf.scene, spec.length, skel);
         var b = FishFrame.bounds(gltf.scene);
         (gltf.animations || []).forEach(function (clip) {
           stripRootMotion(clip, Math.max(b.size.x, b.size.y, b.size.z));
@@ -1201,7 +1270,7 @@
         info: base.info,
         length: base.length,
         speed: 1.2 + Math.random() * 0.6,
-        bend: 0
+        bend: base.bend
       };
       holder.fish = new Fish(spec, 0);
       fishes.push(holder.fish);
@@ -1277,10 +1346,10 @@
   // рыбок не подселяем: иначе первый список отбросит их все как «нет шаблона».
   // Поэтому и поток событий, и опросы стартуют только отсюда.
   function initPainted() {
-    fetch('/assets/coloring/manifest.json')
+    fetch('/assets/coloring/manifest.json?v=sea30')
       .then(function (r) { return r.json(); })
       .then(function (m) {
-        m.fish.forEach(function (f) { paintedSpec[f.name] = { length: f.length }; });
+        m.fish.forEach(function (f) { paintedSpec[f.name] = { length: f.length, sheetView: f.sheetView || null }; });
       })
       .catch(function () { console.error('не загрузился манифест раскрасок'); })
       .then(startUpdates);
@@ -1826,7 +1895,7 @@
   function listPack() {
     if (packListed) return;
     packListed = true;
-    fetch('/assets/coloring/manifest.json')
+    fetch('/assets/coloring/manifest.json?v=sea30')
       .then(function (r) { return r.json(); })
       .then(function (m) {
         (m.fish || []).forEach(function (f) { sheetTitles[f.name] = f.titles || { ru: f.title }; });

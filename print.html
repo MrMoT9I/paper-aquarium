@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title data-t="print.title">Раскраски — печать шаблонов</title>
 <meta name="description" content="Раскраски рыбок для печати: распечатай шаблон, раскрась и отсканируй телефоном — рыбка поплывёт в онлайн-аквариуме. Бесплатно.">
-<link rel="canonical" href="https://aquarium.mrmot9i.com/print.html">
+<link rel="canonical" href="https://fish.toxa.dp.ua/print.html">
 <link rel="icon" href="/favicon.ico" sizes="any">
 <style>
   body { margin: 0; background: #223; font: 14px/1.5 "Segoe UI", system-ui, sans-serif; }
@@ -45,33 +45,47 @@
   body.embed .sheet { box-shadow: 0 8px 24px rgba(0,0,0,.4); }
 
   @media print {
-    @page { size: A4 landscape; margin: 0; }
+    /* Листы SVG — ровно A4 landscape (297×210). На iOS @page size часто
+       игнорируется: в диалоге печати нужна ориентация «Альбомная». */
+    @page { size: 297mm 210mm; margin: 0; }
 
-    /* Ноль отступов у всего, что оборачивает лист. Отступы врезки
-       (body.embed) специфичнее обычных правил и в печать пролезали:
-       лишние 14 px не влезали на страницу, лист сползал на следующую,
-       и в стопке появлялись пустые. */
-    html, body, body.embed { margin: 0; padding: 0; background: #fff; }
-    .top, .bar, .note { display: none; }
-    .wrap, body.embed .wrap { max-width: none; margin: 0; padding: 0; }
-
-    /* Разрыв ставим ПЕРЕД каждым листом, кроме первого. Разрыв «после»
-       срабатывал и на последнем — отсюда пустая страница в конце. */
-    .card { margin: 0; break-inside: avoid; page-break-inside: avoid; }
-    .card + .card { break-before: page; page-break-before: always; }
-
-    /* Размер — от самой страницы, а не в миллиметрах: при полях 0 браузер
-       округляет мм по-своему, лист получался на волос выше страницы и
-       выталкивал за собой пустую. */
-    .sheet {
-      width: 100vw; height: 100vh; object-fit: contain;
-      box-shadow: none; border-radius: 0; background: #fff;
+    html, body, body.embed {
+      margin: 0 !important; padding: 0 !important; background: #fff !important;
+      width: 297mm; height: 210mm;
+    }
+    .top, .bar, .note { display: none !important; }
+    .wrap, body.embed .wrap {
+      max-width: none !important; margin: 0 !important; padding: 0 !important;
+      width: 297mm; height: auto;
     }
 
-    /* Печать одного листа: остальные не просто скрыты — с них снят и разрыв,
-       иначе перед единственным листом оставалась пустая страница. */
-    body.one .card { display: none; break-before: auto; page-break-before: auto; }
-    body.one .card.target { display: block; }
+    .card {
+      margin: 0 !important; padding: 0 !important;
+      width: 297mm; height: 210mm;
+      overflow: hidden;
+      break-inside: avoid; page-break-inside: avoid;
+      break-after: page; page-break-after: always;
+    }
+    .card:last-child {
+      break-after: auto; page-break-after: auto;
+    }
+
+    /* Явные мм, не vw/vh и не %: Safari иначе меряет экран телефона. */
+    .sheet {
+      display: block !important;
+      width: 297mm !important;
+      height: 210mm !important;
+      max-width: none !important;
+      max-height: none !important;
+      object-fit: fill;
+      box-shadow: none !important; border-radius: 0 !important; background: #fff;
+    }
+
+    body.one .card { display: none !important; }
+    body.one .card.target {
+      display: block !important;
+      break-after: auto; page-break-after: auto;
+    }
   }
 </style>
 </head>
@@ -116,7 +130,7 @@ var PDF = Q.has('pdf');
 // правильного размера, в отличие от «Сохранить как PDF» с чужими полями.
 var pdfLink = document.getElementById('pdfLink');
 function repdf() {
-  pdfLink.href = '/assets/coloring/raskraski.' + I18N.lang + '.pdf';
+  pdfLink.href = '/assets/coloring/raskraski.' + (I18N.lang === 'uk' ? 'ru' : I18N.lang) + '.pdf';
   pdfLink.setAttribute('download', I18N.t('print.pdf.file'));
 }
 repdf();
@@ -144,12 +158,56 @@ if (EMBED && window.parent !== window) {
 // том, какие виды в игре — дублировать его разметкой значит однажды напечатать
 // лист, который капчур уже не узнаёт.
 function printOne(name) {
-  document.body.classList.add('one');
-  document.querySelectorAll('.card').forEach(function (c) {
-    c.classList.toggle('target', c.dataset.fish === name);
-  });
-  print();
+  // iOS Safari плохо печатает список (экран вместо A4, склейка листов).
+  // Печатаем один SVG в скрытом iframe ровно 297×210 мм — как страница PDF.
+  var card = document.querySelector('.card[data-fish="' + name + '"]');
+  var img = card && card.querySelector('img.sheet');
+  var src = img ? img.src : '';
+  if (!src) return;
+
+  var old = document.getElementById('print-frame');
+  if (old) old.remove();
+
+  var frame = document.createElement('iframe');
+  frame.id = 'print-frame';
+  frame.setAttribute('aria-hidden', 'true');
+  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0';
+  document.body.appendChild(frame);
+
+  var doc = frame.contentDocument || frame.contentWindow.document;
+  doc.open();
+  doc.write(
+    '<!doctype html><html><head><meta charset="utf-8">' +
+    '<style>' +
+    '@page{size:297mm 210mm;margin:0}' +
+    'html,body{margin:0;padding:0;background:#fff}' +
+    'img{display:block;width:297mm;height:210mm;border:0}' +
+    '</style></head><body>' +
+    '<img id="s" src="' + src.replace(/"/g, '&quot;') + '" alt="">' +
+    '</body></html>'
+  );
+  doc.close();
+
+  var win = frame.contentWindow;
+  var pic = doc.getElementById('s');
+  var done = false;
+  function go() {
+    if (done) return;
+    done = true;
+    try { win.focus(); win.print(); } catch (e) {}
+    setTimeout(function () {
+      var f = document.getElementById('print-frame');
+      if (f) f.remove();
+    }, 1000);
+  }
+  if (pic.complete) setTimeout(go, 50);
+  else pic.onload = function () { setTimeout(go, 50); };
 }
+addEventListener('afterprint', function () {
+  document.body.classList.remove('one');
+  var f = document.getElementById('print-frame');
+  if (f) f.remove();
+});
 
 // Лист у каждого вида свой на каждый язык — подпись под рыбой печатается
 // на том же языке, что и страница. Метки в углах во всех версиях одни и те
@@ -162,11 +220,12 @@ function titleOf(f) {
   return (f.titles && (f.titles[I18N.lang] || f.titles.ru)) || f.title;
 }
 
-fetch('/assets/coloring/manifest.json')
+fetch('/assets/coloring/manifest.json?v=sea30', { cache: 'no-store' })
   .then(function (r) { return r.json(); })
   .then(function (m) {
     var list = document.getElementById('list');
-    m.fish.forEach(function (f) {
+    list.textContent = '';
+    (m.fish || []).forEach(function (f) {
       var card = document.createElement('div');
       card.className = 'card';
       card.dataset.fish = f.name;
@@ -187,7 +246,8 @@ fetch('/assets/coloring/manifest.json')
 
       var retitle = function () {
         b.textContent = img.alt = titleOf(f);
-        img.src = sheetOf(f);
+        var src = sheetOf(f);
+        img.src = src + (src.indexOf('?') >= 0 ? '&' : '?') + 'v=sea16';
       };
       retitle();
       addEventListener('aqua:lang', retitle);

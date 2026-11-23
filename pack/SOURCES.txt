@@ -1,0 +1,8 @@
+Stand-in silhouettes for most fish (extruded coloring contours).
+shark/ — CC0 Great White (Grab3D light).
+seahorse/ — CC0 lined seahorse (3DAssets.dev), sheet from GLB silhouette.
+catfish/ — silhouette pillow from user catfish outline + paint (sheet+3D).
+sawfish/ — user sawfish.glb + natural vertex colors; silhouette from line art.
+ray/ — user ray.glb (manta) + natural vertex colors; top-down silhouette sheet.
+pike/ — user pike.glb + natural vertex colors; silhouette sheet from side view.
+bluewhale/ — user humpback_whale_rebuilt.glb mesh colors; shark length.

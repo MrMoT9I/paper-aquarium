@@ -1,0 +1,231 @@
+[
+  {
+    "name": "shark",
+    "title": "Акула",
+    "url": "/assets/models/pack/shark/shark.glb?v=sz1",
+    "frame": {
+      "body": "z",
+      "up": "y",
+      "lat": "x",
+      "headAtMax": true
+    },
+    "length": 7.92
+  },
+  {
+    "name": "bluewhale",
+    "title": "Голубой кит",
+    "url": "/assets/models/pack/bluewhale/bluewhale.glb?v=rebuilt1",
+    "frame": {
+      "body": "z",
+      "up": "y",
+      "lat": "x",
+      "headAtMax": true
+    },
+    "length": 7.92
+  },
+  {
+    "name": "seahorse",
+    "title": "Морской конёк",
+    "url": "/assets/models/pack/seahorse/seahorse.glb?v=tex3",
+    "frame": {
+      "body": "z",
+      "up": "y",
+      "lat": "x",
+      "headAtMax": true
+    },
+    "length": 1.8
+  },
+  {
+    "name": "catfish",
+    "title": "Сом",
+    "url": "/assets/models/pack/catfish/catfish.glb?v=fix2",
+    "frame": {
+      "body": "z",
+      "up": "y",
+      "lat": "x",
+      "headAtMax": true
+    },
+    "length": 4.5
+  },
+  {
+    "name": "sawfish",
+    "title": "Рыба-пила",
+    "url": "/assets/models/pack/sawfish/sawfish.glb?v=fix2",
+    "frame": {
+      "body": "z",
+      "up": "y",
+      "lat": "x",
+      "headAtMax": true
+    },
+    "length": 5.2
+  },
+  {
+    "name": "pike",
+    "title": "Щука",
+    "url": "/assets/models/pack/pike/pike.glb?v=len70",
+    "frame": {
+      "body": "z",
+      "up": "y",
+      "lat": "x",
+      "headAtMax": true
+    },
+    "length": 2.97
+  },
+  {
+    "name": "ray",
+    "title": "Скат",
+    "url": "/assets/models/pack/ray/ray.glb?v=fix2",
+    "frame": {
+      "body": "z",
+      "up": "y",
+      "lat": "x",
+      "headAtMax": true
+    },
+    "length": 3.8,
+    "sheetView": "top"
+  },
+  {
+    "name": "clownfish",
+    "title": "Рыба-клоун",
+    "url": "/assets/models/pack/clownfish/clownfish.glb?v=fix2",
+    "frame": {
+      "body": "z",
+      "up": "y",
+      "lat": "x",
+      "headAtMax": true
+    },
+    "length": 1.5
+  },
+  {
+    "name": "bluetang",
+    "title": "Голубой хирург",
+    "url": "/assets/models/pack/bluetang/bluetang.glb?v=fix2",
+    "frame": {
+      "body": "z",
+      "up": "y",
+      "lat": "x",
+      "headAtMax": true
+    },
+    "length": 1.9
+  },
+  {
+    "name": "chelmonrostratus",
+    "title": "Рыба-пинцет",
+    "url": "/assets/models/pack/chelmonrostratus/chelmonrostratus.glb?v=fix2",
+    "frame": {
+      "body": "z",
+      "up": "y",
+      "lat": "x",
+      "headAtMax": true
+    },
+    "length": 1.7
+  },
+  {
+    "name": "clowntriggerfish",
+    "title": "Спинорог",
+    "url": "/assets/models/pack/clowntriggerfish/clowntriggerfish.glb?v=fix2",
+    "frame": {
+      "body": "z",
+      "up": "y",
+      "lat": "x",
+      "headAtMax": true
+    },
+    "length": 1.9
+  },
+  {
+    "name": "frenchangelfish",
+    "title": "Французский ангел",
+    "url": "/assets/models/pack/frenchangelfish/frenchangelfish.glb?v=fix2",
+    "frame": {
+      "body": "z",
+      "up": "y",
+      "lat": "x",
+      "headAtMax": true
+    },
+    "length": 1.7
+  },
+  {
+    "name": "fusilierfish",
+    "title": "Цезио",
+    "url": "/assets/models/pack/fusilierfish/fusilierfish.glb?v=fix2",
+    "frame": {
+      "body": "z",
+      "up": "y",
+      "lat": "x",
+      "headAtMax": true
+    },
+    "length": 1.6
+  },
+  {
+    "name": "blackspottedsweetlips",
+    "title": "Ворчун",
+    "url": "/assets/models/pack/blackspottedsweetlips/blackspottedsweetlips.glb?v=fix2",
+    "frame": {
+      "body": "z",
+      "up": "y",
+      "lat": "x",
+      "headAtMax": true
+    },
+    "length": 2
+  },
+  {
+    "name": "coralgrouper",
+    "title": "Групер",
+    "url": "/assets/models/pack/coralgrouper/coralgrouper.glb?v=fix2",
+    "frame": {
+      "body": "z",
+      "up": "y",
+      "lat": "x",
+      "headAtMax": true
+    },
+    "length": 2.2
+  },
+  {
+    "name": "browntang",
+    "title": "Бурый хирург",
+    "url": "/assets/models/pack/browntang/browntang.glb?v=fix2",
+    "frame": {
+      "body": "z",
+      "up": "y",
+      "lat": "x",
+      "headAtMax": true
+    },
+    "length": 1.8
+  },
+  {
+    "name": "bicolorangelfish",
+    "title": "Двухцветный ангел",
+    "url": "/assets/models/pack/bicolorangelfish/bicolorangelfish.glb?v=fix2",
+    "frame": {
+      "body": "z",
+      "up": "y",
+      "lat": "x",
+      "headAtMax": true
+    },
+    "length": 1.7
+  },
+  {
+    "name": "bluecheekbutterflyfish",
+    "title": "Рыба-бабочка",
+    "url": "/assets/models/pack/bluecheekbutterflyfish/bluecheekbutterflyfish.glb?v=fix2",
+    "frame": {
+      "body": "z",
+      "up": "y",
+      "lat": "x",
+      "headAtMax": true
+    },
+    "length": 1.5
+  },
+  {
+    "name": "discus1",
+    "title": "Дискус",
+    "url": "/assets/models/pack/discus1/discus1.glb?v=fix2",
+    "frame": {
+      "body": "z",
+      "up": "y",
+      "lat": "x",
+      "headAtMax": true
+    },
+    "length": 1.55
+  }
+]
